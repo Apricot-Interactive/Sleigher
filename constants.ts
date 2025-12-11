@@ -1,4 +1,5 @@
 
+
 import { GameBalance, WeaponType, EnemyType, PoiType, ItemTier } from './types.ts';
 
 export const MAP_SIZE = 12500;
@@ -115,7 +116,7 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
       fireRate: 400,
       reloadTime: 1000,
       range: 600,
-      projectileSpeed: 15, 
+      projectileSpeed: 30, 
       spread: 0.05,
       magSize: 6,
     },
@@ -124,7 +125,7 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
       fireRate: 900,
       reloadTime: 1800,
       range: 350,
-      projectileSpeed: 10, 
+      projectileSpeed: 20, 
       spread: 0.3,
       magSize: 6,
     },
@@ -133,7 +134,7 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
       fireRate: 110,
       reloadTime: 1400,
       range: 700,
-      projectileSpeed: 15, 
+      projectileSpeed: 30, 
       spread: 0.1,
       magSize: 30,
     },
@@ -142,7 +143,7 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
       fireRate: 40,
       reloadTime: 2500,
       range: 250,
-      projectileSpeed: 5, 
+      projectileSpeed: 12, 
       spread: 0.7,
       magSize: 100,
     },
@@ -174,7 +175,7 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
         radius: 20,
         fireRate: 1500,
         range: 500,
-        projectileSpeed: 5,
+        projectileSpeed: 15,
       },
       [EnemyType.Red]: {
         speed: 8.4,
@@ -213,7 +214,7 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
       fireRate: 50,
       damage: 4,
       range: 250,
-      projectileSpeed: 5,
+      projectileSpeed: 12,
       duration: 3000
   },
   decoy: {

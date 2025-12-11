@@ -1,5 +1,6 @@
 
-import { GameState, GameBalance, WorldPOI, WeaponType, Loot, EnemyType } from '../types.ts';
+
+import { GameState, GameBalance, WorldPOI, WeaponType, Loot, EnemyType, ItemTier, Vector2 } from '../types.ts';
 import { MAP_SIZE, GRID_CELL_SIZE, POI_LOCATIONS, BUNKER_INT_SIZE, BUNKER_ZONES } from '../constants.ts';
 import { distance } from '../utils/math.ts';
 
@@ -275,26 +276,7 @@ const drawLootItem = (ctx: CanvasRenderingContext2D, l: Loot, state: GameState, 
         // Opened Gear Drop (Key handled by WorldKey now)
         ctx.save(); ctx.translate(l.pos.x, l.pos.y);
         
-        // Interaction Text
-        if (state.gamePhase === 'playing' && distance(l.pos, p.pos) < balance.player.pickupRadius) { 
-            ctx.fillStyle = '#ffffff'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; 
-            
-            // LABEL ON BOTTOM (Moved from -40 to 45)
-            ctx.fillText(l.label || 'ITEM', 0, 45);
-
-            // INTERACTION ON TOP (Moved from 40 to -40)
-            const c = l.contents;
-            // Key is no longer interactive here
-            if (c?.type !== 'key') {
-                const canEquip = c?.type === 'gear' && p.equippedGear.some(s => s === null);
-                const canStash = p.inventory.length < 6;
-                const hasWeaponToDrop = p.inventory.some(i => i.type === 'weapon');
-                
-                if (!canEquip && !canStash && !hasWeaponToDrop) {
-                        ctx.fillText("INVENTORY FULL", 0, -40);
-                }
-            }
-        }
+        // Interaction Text handled by overhead prompt logic now
         
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '32px serif';
         if (l.contents?.type === 'key') {
@@ -327,23 +309,6 @@ const drawLootItem = (ctx: CanvasRenderingContext2D, l: Loot, state: GameState, 
         ctx.strokeRect(-25, -25, 50, 50);
         
         drawWeaponIcon(ctx, l.weaponType, 0, 0, 40);
-
-        if (state.gamePhase === 'playing' && distance(l.pos, p.pos) < balance.player.pickupRadius) { 
-            ctx.fillStyle = '#ffffff'; ctx.font = '10px monospace'; ctx.textAlign = 'center'; 
-            
-            // LABEL ON BOTTOM (Moved from -40 to 45)
-            ctx.fillText(l.label || '', 0, 45);
-
-            // COMPARE AGAINST CURRENTLY EQUIPPED WEAPON
-            const equippedTier = p.weaponTiers[p.weapon];
-            
-            // If Tier is lower or equal, check inventory space for "FULL" logic display
-            // Note: If tier > equippedTier, it shows [E] EQUIP above head, so we don't need text here.
-            // If tier <= equippedTier, it tries to STASH. If stash full, show FULL.
-            if (l.tier! <= equippedTier && p.inventory.length >= 6) {
-                    ctx.fillText("INVENTORY FULL", 0, -40);
-            }
-        } 
         ctx.restore(); 
     }
 };
@@ -352,6 +317,51 @@ const drawWorldMedkit = (ctx: CanvasRenderingContext2D, m: any) => {
     ctx.save(); ctx.translate(m.pos.x, m.pos.y);
     ctx.fillStyle = '#ffffff'; ctx.fillRect(-10, -10, 20, 20);
     ctx.fillStyle = '#ef4444'; ctx.fillRect(-3, -8, 6, 16); ctx.fillRect(-8, -3, 16, 6);
+    ctx.restore();
+};
+
+const drawOverheadPrompt = (ctx: CanvasRenderingContext2D, pos: Vector2, text: string) => {
+    ctx.save();
+    // Twice as far above the player (was 38, now 75)
+    ctx.translate(pos.x, pos.y - 75);
+
+    ctx.font = '900 12px monospace';
+    const tm = ctx.measureText(text);
+    
+    // 25% Wider and Taller than previous
+    const w = (tm.width + 16) * 1.25;
+    const h = 22 * 1.25;
+    const r = 8;
+
+    // Shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+
+    // Background
+    ctx.fillStyle = '#ea580c'; // Orange-600
+    ctx.beginPath();
+    const x = -w/2, y = -h/2;
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+    ctx.fill();
+
+    // Border
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#fb923c'; // Orange-400
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 1);
+
     ctx.restore();
 };
 
@@ -441,6 +451,9 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
 
     // Interaction Prompt Overhead
     if (state.gamePhase === 'playing') {
+        const actionLabel = state.isMobile ? "[TAP]" : "[E]";
+        let actionText = "";
+        
         let closestLoot: Loot | null = null;
         let minDst = balance.player.pickupRadius;
         
@@ -454,16 +467,15 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
         }
 
         if (closestLoot) {
-            let actionText = "";
             let isFull = false;
             
             if (closestLoot.type === 'weapon_drop' && closestLoot.weaponType && closestLoot.tier !== undefined) {
                  const equippedTier = p.weaponTiers[p.weapon];
                  // ONLY EQUIP IF TIER IS HIGHER, OTHERWISE STASH
                  if (closestLoot.tier > equippedTier) {
-                      actionText = "[E] EQUIP";
+                      actionText = `${actionLabel} EQUIP`;
                  } else {
-                      if (p.inventory.length < 6) actionText = "[E] STASH";
+                      if (p.inventory.length < 6) actionText = `${actionLabel} STASH`;
                       else isFull = true;
                  }
             } else if (closestLoot.type === 'item_drop' && closestLoot.contents) {
@@ -479,57 +491,38 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
                      const hasWeaponToDrop = p.inventory.some(i => i.type === 'weapon');
                      const canStash = p.inventory.length < 6;
                      
-                     if (canEquip) actionText = "[E] EQUIP";
-                     else if (canStash || hasWeaponToDrop) actionText = "[E] STASH";
+                     if (canEquip) actionText = `${actionLabel} EQUIP`;
+                     else if (canStash || hasWeaponToDrop) actionText = `${actionLabel} STASH`;
                      else isFull = true;
                  }
             }
-            
-            if (actionText && !isFull) {
-                ctx.save();
-                // Twice as far above the player (was 38, now 75)
-                ctx.translate(p.pos.x, p.pos.y - 75);
-
-                const text = actionText;
-                ctx.font = '900 12px monospace';
-                const tm = ctx.measureText(text);
-                
-                // 25% Wider and Taller than previous
-                const w = (tm.width + 16) * 1.25;
-                const h = 22 * 1.25;
-                const r = 8;
-
-                // Shadow
-                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                ctx.shadowBlur = 4;
-                ctx.shadowOffsetY = 2;
-
-                // Background
-                ctx.fillStyle = '#ea580c'; // Orange-600
-                ctx.beginPath();
-                const x = -w/2, y = -h/2;
-                ctx.moveTo(x+r, y);
-                ctx.arcTo(x+w, y, x+w, y+h, r);
-                ctx.arcTo(x+w, y+h, x, y+h, r);
-                ctx.arcTo(x, y+h, x, y, r);
-                ctx.arcTo(x, y, x+w, y, r);
-                ctx.closePath();
-                ctx.fill();
-
-                // Border
-                ctx.shadowColor = 'transparent';
-                ctx.strokeStyle = '#fb923c'; // Orange-400
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Text
-                ctx.fillStyle = '#ffffff';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(text, 0, 1);
-
-                ctx.restore();
+            if (isFull) {
+                // Optional: Draw text directly instead of prompt bubble if just "FULL"
             }
+        }
+        
+        // If no loot interaction or player chose to prioritize bunker (logic below determines visual)
+        // Let's say we prioritize loot if standing ON it, otherwise Bunker.
+        // But for now, if no loot text, check Bunker.
+        if (!actionText && !state.inBunker) {
+             for(let i=0; i<state.activeBunkers.length; i++) {
+                 // Check proximity to bunker. Interaction system uses 100.
+                 // We use 120 for visual prompt to appear slightly before interaction is valid.
+                 if (distance(p.pos, state.activeBunkers[i]) < 120) {
+                     const unlocked = state.unlockedBunkers.get(i) === state.wave;
+                     if (unlocked) {
+                         // Even if unlocked, entering is an action.
+                         actionText = `${actionLabel} ENTER`;
+                     } else if (p.keys > 0) {
+                         actionText = `${actionLabel} USE KEY`;
+                     }
+                     if (actionText) break;
+                 }
+             }
+        }
+        
+        if (actionText) {
+            drawOverheadPrompt(ctx, p.pos, actionText);
         }
     }
 };
@@ -630,12 +623,9 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
 
         // Snow (Always active)
         ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; 
-        const movingDown = p.velocity.y > 0.5; 
-        const snowSpeed = movingDown ? 0.8 : 1.5; 
         ctx.beginPath(); 
         state.snow.forEach((flake, i) => { 
-            flake.y += snowSpeed; 
-            flake.x += Math.sin(Date.now() / 2000 + i) * 0.5; 
+            // Position updated in GameLoop now for DT independence
             let drawX = (flake.x - camera.x) % width; if (drawX < 0) drawX += width; drawX += width; drawX = drawX % width; drawX += camera.x; 
             let drawY = (flake.y - camera.y) % height; if (drawY < 0) drawY += height; drawY += height; drawY = drawY % height; drawY += camera.y; 
             const r = 2 + (i % 2); 
@@ -769,7 +759,7 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
         state.magicDrops.forEach(m => {
             ctx.save(); ctx.translate(m.pos.x, m.pos.y + Math.sin(state.gameTime / 200) * 5); // Bobbing
             ctx.font = '32px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            if (m.tier === 'Rare') { ctx.shadowBlur = 15; ctx.shadowColor = '#c084fc'; }
+            if (m.tier === 'Rare') { ctx.shadowBlur = 15; ctx.shadowColor = '#c084fc' }
             ctx.fillText('✨', 0, 0);
             ctx.restore();
         });
@@ -790,9 +780,11 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
                 
                 const isUnlocked = state.unlockedBunkers.get(i) === state.wave; 
                 const hasKey = p.keys > 0; 
+                // Overhead prompt handles visual, this is floor text
+                
                 ctx.font = 'bold 12px monospace'; 
-                if (isUnlocked) { ctx.fillStyle = '#22c55e'; ctx.fillText("OPEN", bx, by + 58); ctx.fillStyle = '#ffffff'; ctx.fillText("[E] ENTER", bx, by + 72); } 
-                else if (hasKey) { ctx.fillStyle = '#facc15'; ctx.fillText("LOCKED", bx, by + 58); ctx.fillStyle = '#ffffff'; ctx.fillText("[E] USE KEY", bx, by + 72); } 
+                if (isUnlocked) { ctx.fillStyle = '#22c55e'; ctx.fillText("OPEN", bx, by + 58); } 
+                else if (hasKey) { ctx.fillStyle = '#facc15'; ctx.fillText("LOCKED", bx, by + 58); } 
                 else { ctx.fillStyle = '#ef4444'; ctx.fillText("LOCKED (NEED KEY)", bx, by + 58); } 
             } 
         });
@@ -1010,6 +1002,49 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
         ctx.globalAlpha = 1.0;
     }
 
-    if (state.gamePhase !== 'intro' && state.gamePhase !== 'menu') drawPlayer(ctx, state, balance);
+    if (state.gamePhase !== 'intro' && state.gamePhase !== 'menu') {
+        drawPlayer(ctx, state, balance);
+        
+        // Draw Mobile Joysticks
+        if (state.isMobile) {
+            ctx.restore(); // Pop back to Screen Space (Identity)
+            ctx.save();
+            
+            // Left Joystick
+            if (state.inputs.mobile.joysticks.left.active) {
+                const j = state.inputs.mobile.joysticks.left;
+                ctx.beginPath();
+                ctx.arc(j.origin.x, j.origin.y, 40, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(j.current.x, j.current.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fill();
+            }
+
+            // Right Joystick
+            if (state.inputs.mobile.joysticks.right.active) {
+                const j = state.inputs.mobile.joysticks.right;
+                ctx.beginPath();
+                ctx.arc(j.origin.x, j.origin.y, 40, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(j.current.x, j.current.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.fill();
+            }
+        }
+    }
+    
     ctx.restore();
 };

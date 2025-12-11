@@ -1,4 +1,5 @@
 
+
 export enum WeaponType {
   Pistol = 'Pistol',
   Shotgun = 'Shotgun',
@@ -316,9 +317,20 @@ export interface GameState {
     depositedCoins: number;
     hordeMode: { active: boolean; timeLeft: number };
     
+    isMobile: boolean;
     inputs: {
         keys: Set<string>;
         mouse: Vector2;
+        mobile: {
+            active: boolean;
+            moveVec: Vector2;
+            aimVec: Vector2;
+            isFiring: boolean;
+            joysticks: {
+                left: { origin: Vector2, current: Vector2, active: boolean, id: number | null };
+                right: { origin: Vector2, current: Vector2, active: boolean, id: number | null };
+            };
+        };
     };
 }
 
@@ -375,4 +387,5 @@ export interface HUDState {
     isMoving: boolean;
     isFiring: boolean;
     activeModal: 'sell' | 'gunsmith' | 'crafting' | null;
+    isMobile: boolean;
 }

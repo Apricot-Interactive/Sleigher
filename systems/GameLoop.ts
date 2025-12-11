@@ -1,4 +1,5 @@
 
+
 import { GameState, GameBalance, Vector2, WeaponType, EnemyType, ItemTier, AmmoType, Loot, GearType, Loadout, WorldPOI } from '../types.ts';
 import { MAP_SIZE, POI_LOCATIONS, BUNKER_INT_SIZE, BUNKER_ZONES, LOOT_CONFIG } from '../constants.ts';
 import { distance, normalize, resolveRectCollision } from '../utils/math.ts';
@@ -12,11 +13,16 @@ export const createInitialState = (balance: GameBalance, loadout?: Loadout): Gam
     // Generate Map
     const mapData = generateMap();
     
+    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
     // Initialize Snow
     const snow = [];
     const w = window.innerWidth || 1920;
     const h = window.innerHeight || 1080;
-    for(let i=0; i<400; i++) {
+    // Optimize for mobile: Reduce snow count significantly
+    const snowCount = isMobile ? 50 : 400;
+    
+    for(let i=0; i<snowCount; i++) {
         snow.push({ x: Math.random() * w, y: Math.random() * h });
     }
 
@@ -85,21 +91,44 @@ export const createInitialState = (balance: GameBalance, loadout?: Loadout): Gam
         enemies: [], projectiles: [], particles: [], loot: [], floatingTexts: [], turrets: [], decoys: [], worldMedkits: [], worldKeys: [], magicDrops: [], clones: [], puddles: [],
         camera: { x: 0, y: 0 }, screenShake: 0, snow: snow,
         gameTime: 0, wave: 1, waveTimer: balance.enemies.waveDuration * 1.5, nextSpawnTime: 0, depositedCoins: 0, hordeMode: { active: false, timeLeft: 0 },
-        inputs: { keys: new Set(), mouse: { x: 0, y: 0 } }
+        isMobile: isMobile,
+        inputs: { 
+            keys: new Set(), 
+            mouse: { x: 0, y: 0 },
+            mobile: {
+                active: false,
+                moveVec: {x:0, y:0},
+                aimVec: {x:0, y:0},
+                isFiring: false,
+                joysticks: {
+                    left: { origin: {x:0,y:0}, current: {x:0,y:0}, active: false, id: null },
+                    right: { origin: {x:0,y:0}, current: {x:0,y:0}, active: false, id: null }
+                }
+            } 
+        }
     };
 };
 
 export const updateGame = (state: GameState, balance: GameBalance, dt: number) => {
     state.gameTime += dt;
+    // Calculate tick factor normalized to 60fps (16.66ms)
+    // if dt = 33ms (30fps), tick = 2.0 (move twice as far per frame)
+    const tick = dt / 16.667; 
+
     const p = state.player;
-    const SPEED_SCALE = 0.1;
+    const SPEED_SCALE = 0.25; // Boosted from 0.1 to match high-fps feel
     const isPlaying = state.gamePhase === 'playing';
 
     if (state.loot.length < LOOT_CONFIG.SPAWNING.MAX_PRESENTS) spawnLoot(state, LOOT_CONFIG.SPAWNING.BATCH_SIZE, true);
 
     // Menu / Game Over / Victory Logic (Visuals Only)
     if (state.gamePhase === 'menu' || state.gamePhase === 'intro' || state.gamePhase === 'game_over' || state.gamePhase === 'victory') {
-        state.particles.forEach(p => { p.pos.x += p.velocity.x; p.pos.y += p.velocity.y; p.life -= 0.02; if (p.life <= 0) p.dead = true; });
+        state.particles.forEach(p => { 
+            p.pos.x += p.velocity.x * tick; 
+            p.pos.y += p.velocity.y * tick; 
+            p.life -= 0.02 * tick; 
+            if (p.life <= 0) p.dead = true; 
+        });
         state.particles = state.particles.filter(p => !p.dead);
         // Intro enemies wander
         if (state.gamePhase === 'intro') {
@@ -107,12 +136,27 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                  // Wander Logic
                  if (!enemy.wanderTarget || distance(enemy.pos, enemy.wanderTarget) < 20) { const a = Math.random() * Math.PI * 2; const d = Math.random() * 300; enemy.wanderTarget = { x: enemy.spawnOrigin.x + Math.cos(a) * d, y: enemy.spawnOrigin.y + Math.sin(a) * d }; }
                  const moveVec = normalize({ x: enemy.wanderTarget.x - enemy.pos.x, y: enemy.wanderTarget.y - enemy.pos.y });
-                 enemy.pos.x += moveVec.x * balance.enemies.types[enemy.type].speed * SPEED_SCALE * 0.5;
-                 enemy.pos.y += moveVec.y * balance.enemies.types[enemy.type].speed * SPEED_SCALE * 0.5;
+                 enemy.pos.x += moveVec.x * balance.enemies.types[enemy.type].speed * SPEED_SCALE * 0.5 * tick;
+                 enemy.pos.y += moveVec.y * balance.enemies.types[enemy.type].speed * SPEED_SCALE * 0.5 * tick;
              });
         }
+        
+        // Update Snow (Background)
+        state.snow.forEach((flake, i) => { 
+            flake.y += 4.0 * tick; 
+            flake.x += Math.sin(Date.now() / 2000 + i) * 1.5 * tick; 
+            // Screen wrap logic not needed in state, handled by renderer modulo, but we must update state
+        });
         return;
     }
+
+    // Update Snow (Playing)
+    const movingDown = p.velocity.y > 0.5; 
+    const snowSpeed = movingDown ? 2.5 : 4.0; 
+    state.snow.forEach((flake, i) => { 
+        flake.y += snowSpeed * tick; 
+        flake.x += Math.sin(Date.now() / 2000 + i) * 1.5 * tick; 
+    });
 
     // Global Healing Logic (Works in World and Bunker)
     if (isPlaying && state.healingState.active) {
@@ -205,8 +249,8 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         
         // Magic Pickup
         state.magicDrops = state.magicDrops.filter(m => {
-            m.pos.x += m.velocity.x;
-            m.pos.y += m.velocity.y;
+            m.pos.x += m.velocity.x * tick;
+            m.pos.y += m.velocity.y * tick;
             m.velocity.x *= 0.9; m.velocity.y *= 0.9;
             
             if (distance(m.pos, p.pos) < balance.player.pickupRadius) {
@@ -261,12 +305,23 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         
         const move = { x: 0, y: 0 };
         if (state.inputs.keys.has('w')) move.y -= 1; if (state.inputs.keys.has('s')) move.y += 1; if (state.inputs.keys.has('a')) move.x -= 1; if (state.inputs.keys.has('d')) move.x += 1;
-        const normMove = normalize(move);
-        bPos.x += normMove.x * balance.player.speed * SPEED_SCALE * 0.8; bPos.y += normMove.y * balance.player.speed * SPEED_SCALE * 0.8;
+        
+        let normMove = normalize(move);
+        if (state.isMobile && state.inputs.mobile.joysticks.left.active) {
+            normMove = state.inputs.mobile.moveVec;
+        }
+
+        bPos.x += normMove.x * balance.player.speed * SPEED_SCALE * 0.8 * tick; 
+        bPos.y += normMove.y * balance.player.speed * SPEED_SCALE * 0.8 * tick;
         bPos.x = Math.max(balance.player.radius, Math.min(BUNKER_INT_SIZE.w - balance.player.radius, bPos.x)); bPos.y = Math.max(balance.player.radius, Math.min(BUNKER_INT_SIZE.h - balance.player.radius, bPos.y));
         p.pos = { ...bPos };
-        const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
-        p.angle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
+        
+        if (state.isMobile && state.inputs.mobile.joysticks.right.active) {
+            p.angle = Math.atan2(state.inputs.mobile.aimVec.y, state.inputs.mobile.aimVec.x);
+        } else {
+            const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
+            p.angle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
+        }
 
         if (distance(bPos, BUNKER_ZONES.EXIT) < BUNKER_ZONES.EXIT.radius) {
             state.inBunker = false;
@@ -383,8 +438,8 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                 currentSpeed = maxSpeed;
             }
             
-            state.exitAnim.offset.x += currentSpeed;
-            state.exitAnim.offset.y -= currentSpeed;
+            state.exitAnim.offset.x += currentSpeed * tick;
+            state.exitAnim.offset.y -= currentSpeed * tick;
             
             p.pos.x = POI_LOCATIONS.SLEIGH.x + state.exitAnim.offset.x - 40; 
             p.pos.y = POI_LOCATIONS.SLEIGH.y + state.exitAnim.offset.y; 
@@ -500,14 +555,22 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         if (isPlaying && !p.reviving && !state.exitAnim.active) {
             const move = { x: 0, y: 0 };
             if (state.inputs.keys.has('w')) move.y -= 1; if (state.inputs.keys.has('s')) move.y += 1; if (state.inputs.keys.has('a')) move.x -= 1; if (state.inputs.keys.has('d')) move.x += 1;
-            const normMove = normalize(move);
+            
+            let normMove = normalize(move);
+            if (state.isMobile && state.inputs.mobile.joysticks.left.active) {
+                normMove = state.inputs.mobile.moveVec;
+            }
             
             const hasShoes = p.equippedGear.some(g => g?.stats?.type === 'shoes');
             let speedMod = hasShoes ? 2.0 : 1.0;
             if (balance.cheats?.speedy) speedMod += 2.0;
 
+            // Velocity is "pixels per 60hz frame"
             p.velocity = { x: normMove.x * balance.player.speed * SPEED_SCALE * speedMod, y: normMove.y * balance.player.speed * SPEED_SCALE * speedMod };
-            p.pos.x += p.velocity.x; p.pos.y += p.velocity.y;
+            // Apply tick
+            p.pos.x += p.velocity.x * tick; 
+            p.pos.y += p.velocity.y * tick;
+            
             p.pos.x = Math.max(0, Math.min(MAP_SIZE, p.pos.x)); p.pos.y = Math.max(0, Math.min(MAP_SIZE, p.pos.y));
             
             const distToTree = distance(p.pos, POI_LOCATIONS.TREE);
@@ -518,16 +581,33 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                 else { const r = poi.radius || 100; const dist = distance(p.pos, poi); if (dist < r + balance.player.radius) { const pushDir = normalize({ x: p.pos.x - poi.x, y: p.pos.y - poi.y }); p.pos.x = poi.x + pushDir.x * (r + balance.player.radius); p.pos.y = poi.y + pushDir.y * (r + balance.player.radius); } } 
             }
             
-            const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
-            p.angle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
-            if (state.inputs.keys.has('mousedown')) {
-                handleShoot(state, balance);
-                state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
+            // AIMING LOGIC UPDATE FOR MOBILE
+            if (state.isMobile) {
+                if (state.inputs.mobile.joysticks.right.active) {
+                    p.angle = Math.atan2(state.inputs.mobile.aimVec.y, state.inputs.mobile.aimVec.x);
+                    if (state.inputs.mobile.isFiring) {
+                        handleShoot(state, balance);
+                        state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
+                    }
+                } else if (state.inputs.mobile.joysticks.left.active) {
+                     // Aim in movement direction if not aiming
+                     if (Math.abs(normMove.x) > 0.001 || Math.abs(normMove.y) > 0.001) {
+                         p.angle = Math.atan2(normMove.y, normMove.x);
+                     }
+                }
+                // Else: Do nothing, preserve existing p.angle
+            } else {
+                const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
+                p.angle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
+                if (state.inputs.keys.has('mousedown')) {
+                    handleShoot(state, balance);
+                    state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
+                }
             }
         }
 
         // Enemy Updates (Spawn/Move/Attack)
-        updateEnemies(state, balance, dt);
+        updateEnemies(state, balance, dt, tick);
 
         state.turrets.forEach(turret => {
             turret.rotation += (Math.PI * 2 / 3000) * dt; 
@@ -572,8 +652,8 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
             const d = distance(c.pos, target);
             if (d > 40) {
                 const dir = normalize({ x: target.x - c.pos.x, y: target.y - c.pos.y });
-                c.pos.x += dir.x * balance.player.speed * SPEED_SCALE;
-                c.pos.y += dir.y * balance.player.speed * SPEED_SCALE;
+                c.pos.x += dir.x * balance.player.speed * SPEED_SCALE * tick;
+                c.pos.y += dir.y * balance.player.speed * SPEED_SCALE * tick;
             }
             c.rotation = p.angle; 
             return true;
@@ -589,8 +669,8 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         });
         
         state.magicDrops = state.magicDrops.filter(m => {
-            m.pos.x += m.velocity.x;
-            m.pos.y += m.velocity.y;
+            m.pos.x += m.velocity.x * tick;
+            m.pos.y += m.velocity.y * tick;
             m.velocity.x *= 0.9; m.velocity.y *= 0.9;
             
             if (distance(m.pos, p.pos) < balance.player.pickupRadius) {
@@ -606,7 +686,9 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
 
         for (let i = state.projectiles.length - 1; i >= 0; i--) {
             const proj = state.projectiles[i];
-            proj.pos.x += proj.velocity.x; proj.pos.y += proj.velocity.y; proj.rangeRemaining -= Math.hypot(proj.velocity.x, proj.velocity.y);
+            proj.pos.x += proj.velocity.x * tick; 
+            proj.pos.y += proj.velocity.y * tick; 
+            proj.rangeRemaining -= Math.hypot(proj.velocity.x * tick, proj.velocity.y * tick);
             if (proj.rangeRemaining <= 0 || proj.pos.x < 0 || proj.pos.x > MAP_SIZE || proj.pos.y < 0 || proj.pos.y > MAP_SIZE) { proj.dead = true; continue; }
 
             if (proj.source === 'player' || proj.source === 'turret' || proj.source === 'clone') {
@@ -688,16 +770,16 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
     state.loot = state.loot.filter(l => !l.dead);
 
     state.particles.forEach(p => {
-        p.pos.x += p.velocity.x;
-        p.pos.y += p.velocity.y;
+        p.pos.x += p.velocity.x * tick;
+        p.pos.y += p.velocity.y * tick;
         p.life -= (dt / 1000);
         if (p.life <= 0) p.dead = true;
     });
     state.particles = state.particles.filter(p => !p.dead);
 
     state.floatingTexts.forEach(t => {
-        t.pos.x += t.velocity.x;
-        t.pos.y += t.velocity.y;
+        t.pos.x += t.velocity.x * tick;
+        t.pos.y += t.velocity.y * tick;
         t.life -= (dt / 1000);
     });
     state.floatingTexts = state.floatingTexts.filter(t => t.life > 0);

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GameBalance, HeroRecord, InventoryItem, ItemTier, WeaponType } from '../types.ts';
 import { WeaponIcon } from './WeaponIcon.tsx';
@@ -71,19 +72,39 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
     let fngScore = 1; // Grey Pistol
     if (fngGear && fngGear.tier !== undefined) fngScore += getScore(fngGear.tier);
 
+    const handleDeploy = () => {
+        // Attempt Fullscreen on Mobile Only
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || navigator.maxTouchPoints > 0;
+        
+        if (isMobile) {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {});
+            } else if ((elem as any).webkitRequestFullscreen) { /* Safari */
+                (elem as any).webkitRequestFullscreen();
+            } else if ((elem as any).msRequestFullscreen) { /* IE11 */
+                (elem as any).msRequestFullscreen();
+            }
+        }
+
+        window.dispatchEvent(new CustomEvent('start-game-request', { detail: { index: selectedHeroIndex } }));
+        window.dispatchEvent(new CustomEvent('start-intro'));
+    };
+
     return (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-auto">
-            <div className="relative mb-8">
-                <h1 className="text-9xl font-black text-red-600 tracking-tighter transform -skew-x-12 scale-y-150 origin-bottom drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] border-text">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-auto overflow-hidden">
+            <div className="relative mb-8 max-w-[95vw]">
+                <h1 className="text-[12vw] sm:text-7xl md:text-9xl font-black text-red-600 tracking-tighter transform -skew-x-12 scale-y-150 origin-bottom drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] border-text whitespace-nowrap">
                     SLEIGHER
                 </h1>
             </div>
 
-            <div className="flex gap-4 mb-8 items-end">
+            {/* Increased vertical padding to py-20 to ensure scaled selection box doesn't clip */}
+            <div className="flex flex-wrap justify-center gap-4 mb-4 items-center w-full max-h-[60vh] overflow-y-auto px-4 py-20">
                 {/* FNG Slot */}
                 <button 
                     onClick={() => setSelectedHeroIndex(-1)}
-                    className={`flex flex-col items-center transition-transform hover:scale-105 ${selectedHeroIndex === -1 ? 'scale-110 z-10' : 'opacity-80'}`}
+                    className={`flex flex-col items-center transition-transform hover:scale-105 shrink-0 ${selectedHeroIndex === -1 ? 'scale-110 z-10' : 'opacity-80'}`}
                 >
                     <div className={`w-32 h-40 bg-slate-900 border-4 rounded-lg flex flex-col relative overflow-hidden ${selectedHeroIndex === -1 ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]' : 'border-slate-700'}`}>
                         {/* Top Section: Icons */}
@@ -123,7 +144,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
                     
                     if (!vet) {
                         return (
-                            <div key={i} className="flex flex-col items-center opacity-40 grayscale">
+                            <div key={i} className="flex flex-col items-center opacity-40 grayscale shrink-0">
                                 <div className="w-32 h-40 bg-slate-900 border-4 border-slate-700 rounded-lg flex items-center justify-center border-dashed">
                                     <span className="text-4xl text-slate-700">🔒</span>
                                 </div>
@@ -137,7 +158,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
                         <button 
                             key={i} 
                             onClick={() => setSelectedHeroIndex(i)}
-                            className={`flex flex-col items-center transition-transform hover:scale-105 ${isSelected ? 'scale-110 z-10' : 'opacity-90'}`}
+                            className={`flex flex-col items-center transition-transform hover:scale-105 shrink-0 ${isSelected ? 'scale-110 z-10' : 'opacity-90'}`}
                         >
                             <div className={`w-32 h-40 bg-slate-900 border-4 rounded-lg flex flex-col relative overflow-hidden ${isSelected ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]' : 'border-slate-700'}`}>
                                 
@@ -174,11 +195,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
             </div>
 
             <button 
-                onClick={() => {
-                    window.dispatchEvent(new CustomEvent('start-game-request', { detail: { index: selectedHeroIndex } }));
-                    window.dispatchEvent(new CustomEvent('start-intro'));
-                }}
-                className="w-64 py-4 bg-green-600 hover:bg-green-500 text-white font-black text-2xl uppercase rounded tracking-wider border-2 border-green-400 shadow-xl transition-transform hover:scale-105 mb-4"
+                onClick={handleDeploy}
+                className="w-[80vw] max-w-sm py-4 bg-green-600 hover:bg-green-500 text-white font-black text-2xl uppercase rounded tracking-wider border-2 border-green-400 shadow-xl transition-transform hover:scale-105 mb-4 shrink-0"
             >
                 DEPLOY
             </button>

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { GameCanvas, GameCanvasHandle } from './components/GameCanvas.tsx';
 import { PauseMenu } from './components/PauseMenu.tsx';
@@ -173,7 +174,7 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-slate-900">
+    <div className="relative w-full h-[100dvh] overflow-hidden bg-slate-900 touch-none">
       <GameCanvas 
         ref={canvasRef}
         balance={balance} 
@@ -184,7 +185,7 @@ export default function App() {
       <UIOverlay 
         data={hudData} 
         balance={balance} 
-        veterans={veterans}
+        veterans={veterans} 
         fngGear={fngGear}
       />
       {paused && (

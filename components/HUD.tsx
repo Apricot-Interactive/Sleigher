@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { InventoryItem, ItemTier, HUDState } from '../types.ts';
 import { WeaponIcon } from './WeaponIcon.tsx';
@@ -175,6 +176,10 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
         window.dispatchEvent(new CustomEvent('upgrade-weapon'));
     };
 
+    const triggerAction = (action: string) => {
+        window.dispatchEvent(new CustomEvent('mobile-action', { detail: { action } }));
+    };
+
     const weaponColorClass = getTierColor(data.weaponTier).split(' ')[1]; // Extract text color class
 
     // --- MODAL RENDERING ---
@@ -245,17 +250,39 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
         modalContent = renderBunkerModal("Crafting Station", body);
     }
 
+    const actionLabel = data.isMobile ? "[TAP]" : "[E]";
+    const summonLabel = data.isMobile ? "[TAP]" : "[Q]";
+
     return (
-        <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
-            {/* TOP BAR */}
-            <div className="flex justify-between items-start">
-                <div className="flex flex-col gap-2">
+        <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between select-none">
+            
+            {/* TOP BAR: Layout Container */}
+            <div className="flex justify-between items-start w-full">
+                
+                {/* LEFT COLUMN: Header + HP */}
+                <div className="flex flex-col gap-2 pointer-events-auto">
+                    {/* Header Row: Settings + Logo */}
+                    <div className="flex items-center gap-2 mb-1">
+                        <button 
+                            onClick={() => window.dispatchEvent(new CustomEvent('open-settings'))}
+                            className="w-8 h-8 bg-slate-800 border border-slate-600 rounded flex items-center justify-center text-lg shadow hover:bg-slate-700 transition-transform hover:rotate-90"
+                        >
+                            ⚙️
+                        </button>
+                        <div className="h-8 flex items-center">
+                            <span className="font-black text-red-600 text-2xl tracking-tighter transform -skew-x-12 drop-shadow-md">SLEIGHER</span>
+                        </div>
+                    </div>
+
+                    {/* HP Bar */}
                     <div className="w-64 h-6 bg-slate-900 border-2 border-slate-600 rounded skew-x-[-12deg] overflow-hidden relative">
                         <div className="h-full bg-red-600 transition-all duration-200" style={{ width: `${Math.max(0, hpPercent)}%` }} />
                         <span className="absolute inset-0 flex items-center justify-center font-bold text-sm text-white drop-shadow">HP {Math.floor(data.hp)} / {data.maxHp}</span>
                     </div>
                 </div>
-                <div className="text-right flex flex-col items-end">
+
+                {/* RIGHT COLUMN: Wave & Objective */}
+                <div className="text-right flex flex-col items-end pointer-events-auto">
                     <div className="text-4xl font-black text-white drop-shadow-lg tracking-tighter">
                         {data.hordeTime ? <span className="text-red-500">SURVIVE: {Math.ceil(data.hordeTime)}s</span> : data.inBunker ? <span className="text-yellow-500">BUNKER HUB</span> : <span>WAVE {data.wave}</span>}
                     </div>
@@ -271,30 +298,45 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
 
             {/* INTERACTION PROMPTS (Popups) - Only show if no modal active */}
             {!data.activeModal && (
-                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none">
+                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-auto">
                     {data.showInfuse && (
-                        <div className="bg-orange-600 text-white px-6 py-3 rounded-full font-black uppercase text-xl border-4 border-orange-400 shadow-xl">
-                            [E] {data.depositedCoins > 0 ? 'INFUSE MORE' : 'INFUSE MAGIC'}
+                        <div 
+                            onClick={() => triggerAction('interact')} 
+                            className="bg-orange-600 text-white px-6 py-3 rounded-full font-black uppercase text-xl border-4 border-orange-400 shadow-xl cursor-pointer active:scale-95 transition-transform"
+                        >
+                            {actionLabel} {data.depositedCoins > 0 ? 'INFUSE MORE' : 'INFUSE MAGIC'}
                         </div>
                     )}
                     {data.showSummon && (
-                         <div className="bg-orange-600 text-white px-6 py-3 rounded-full font-black uppercase text-xl border-4 border-orange-400 shadow-xl">
-                            [Q] START IT UP!
+                         <div 
+                            onClick={() => triggerAction('summon')}
+                            className="bg-orange-600 text-white px-6 py-3 rounded-full font-black uppercase text-xl border-4 border-orange-400 shadow-xl cursor-pointer active:scale-95 transition-transform"
+                        >
+                            {summonLabel} START IT UP!
                         </div>
                     )}
                     {data.showGunsmith && (
-                         <div className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold uppercase text-lg border-2 border-slate-500 shadow-xl">
-                            [E] GUNSMITH
+                         <div 
+                            onClick={() => triggerAction('interact')}
+                            className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold uppercase text-lg border-2 border-slate-500 shadow-xl cursor-pointer active:scale-95 transition-transform"
+                        >
+                            {actionLabel} GUNSMITH
                         </div>
                     )}
                     {data.showSell && (
-                         <div className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold uppercase text-lg border-2 border-slate-500 shadow-xl">
-                            [E] SELL ITEMS
+                         <div 
+                            onClick={() => triggerAction('interact')}
+                            className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold uppercase text-lg border-2 border-slate-500 shadow-xl cursor-pointer active:scale-95 transition-transform"
+                        >
+                            {actionLabel} SELL ITEMS
                         </div>
                     )}
                     {data.showCrafting && (
-                         <div className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold uppercase text-lg border-2 border-slate-500 shadow-xl">
-                            [E] CRAFTING
+                         <div 
+                            onClick={() => triggerAction('interact')}
+                            className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold uppercase text-lg border-2 border-slate-500 shadow-xl cursor-pointer active:scale-95 transition-transform"
+                        >
+                            {actionLabel} CRAFTING
                         </div>
                     )}
                 </div>
@@ -313,6 +355,52 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
                             <button onClick={handleDrop} className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded uppercase">Drop</button>
                             <button onClick={() => setPopupItem(null)} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded uppercase">Cancel</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* BACKPACK FLYOUT - CENTERED */}
+            {bagOpen && (
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-[164px] flex flex-col items-center gap-2 z-50 pointer-events-auto">
+                    <div className="bg-black/50 text-white text-xs px-2 py-1 rounded whitespace-nowrap shadow-md backdrop-blur-sm">
+                        {data.activeModal === 'sell' ? 'CLICK TO SELL' : 'Tap to equip, hold to drop'}
+                    </div>
+                    <div className={`bg-slate-900/95 border-2 ${data.activeModal === 'sell' ? 'border-yellow-400' : 'border-slate-600'} p-2 rounded shadow-2xl grid grid-cols-3 gap-2 w-max`}>
+                        {[0,1,2,3,4,5].map(i => {
+                            const item = data.inventory[i];
+                            const isSelected = swapSource?.location === 'bag' && swapSource.index === i;
+                            return (
+                                <div 
+                                    key={i}
+                                    onPointerDown={(e) => handlePointerDown(e, item, 'bag', i)}
+                                    onPointerUp={handlePointerUp}
+                                    onPointerLeave={handlePointerUp}
+                                    onClick={() => handleBagItemClick(i)}
+                                    className={`w-16 h-16 bg-slate-800 border-2 rounded flex flex-col items-center justify-center relative cursor-pointer pointer-events-auto hover:bg-slate-700 overflow-hidden
+                                        ${item ? getTierColor(item.tier) : 'border-slate-700'}
+                                        ${isSelected ? 'ring-2 ring-white bg-slate-700' : ''}
+                                    `}
+                                >
+                                    {pressingTarget?.location === 'bag' && pressingTarget.index === i && (
+                                        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+                                            <svg className="w-full h-full rotate-[-90deg] p-1">
+                                                <circle cx="50%" cy="50%" r="40%" fill="none" stroke="white" strokeWidth="4" pathLength="100" strokeDasharray="100" strokeDashoffset="100" style={{animation: 'dash 1s linear forwards'}} />
+                                            </svg>
+                                        </div>
+                                    )}
+                                    {item ? (
+                                        <>
+                                            {item.type === 'weapon' ? <WeaponIcon type={item.weaponType!} className="w-8 h-8" /> : renderGearIcon(item)}
+                                            {data.activeModal === 'sell' && (
+                                                <div className="absolute bottom-0 w-full bg-black/60 text-yellow-400 text-[9px] text-center font-bold">
+                                                    ${item.value}
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -364,59 +452,13 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
                     </div>
                     
                     <div className="flex gap-2 items-end">
-                        {/* BAG BUTTON & FLYOUT CONTAINER */}
-                        <div className="relative">
-                            {bagOpen && (
-                                <div className="absolute right-[calc(100%+8px)] bottom-0 flex flex-col items-end gap-2">
-                                    <div className="bg-black/50 text-white text-xs px-2 py-1 rounded whitespace-nowrap shadow-md backdrop-blur-sm">
-                                        {data.activeModal === 'sell' ? 'CLICK TO SELL' : 'Tap to equip, hold to drop'}
-                                    </div>
-                                    <div className={`bg-slate-900/95 border-2 ${data.activeModal === 'sell' ? 'border-yellow-400' : 'border-slate-600'} p-2 rounded shadow-2xl grid grid-cols-3 gap-2 w-max`}>
-                                        {[0,1,2,3,4,5].map(i => {
-                                            const item = data.inventory[i];
-                                            const isSelected = swapSource?.location === 'bag' && swapSource.index === i;
-                                            return (
-                                                <div 
-                                                    key={i}
-                                                    onPointerDown={(e) => handlePointerDown(e, item, 'bag', i)}
-                                                    onPointerUp={handlePointerUp}
-                                                    onPointerLeave={handlePointerUp}
-                                                    onClick={() => handleBagItemClick(i)}
-                                                    className={`w-16 h-16 bg-slate-800 border-2 rounded flex flex-col items-center justify-center relative cursor-pointer pointer-events-auto hover:bg-slate-700 overflow-hidden
-                                                        ${item ? getTierColor(item.tier) : 'border-slate-700'}
-                                                        ${isSelected ? 'ring-2 ring-white bg-slate-700' : ''}
-                                                    `}
-                                                >
-                                                    {pressingTarget?.location === 'bag' && pressingTarget.index === i && (
-                                                        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-                                                            <svg className="w-full h-full rotate-[-90deg] p-1">
-                                                                <circle cx="50%" cy="50%" r="40%" fill="none" stroke="white" strokeWidth="4" pathLength="100" strokeDasharray="100" strokeDashoffset="100" style={{animation: 'dash 1s linear forwards'}} />
-                                                            </svg>
-                                                        </div>
-                                                    )}
-                                                    {item ? (
-                                                        <>
-                                                            {item.type === 'weapon' ? <WeaponIcon type={item.weaponType!} className="w-8 h-8" /> : renderGearIcon(item)}
-                                                            {data.activeModal === 'sell' && (
-                                                                <div className="absolute bottom-0 w-full bg-black/60 text-yellow-400 text-[9px] text-center font-bold">
-                                                                    ${item.value}
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    ) : null}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                            <button 
-                                onClick={() => { setBagOpen(!bagOpen); setLastBagInteraction(Date.now()); }}
-                                className={`w-16 h-16 bg-slate-800 border-2 ${bagOpen || data.activeModal === 'sell' ? 'border-yellow-400 bg-slate-700' : 'border-slate-500'} rounded flex items-center justify-center text-3xl hover:bg-slate-700 transition-colors pointer-events-auto shadow-lg active:scale-95`}
-                            >
-                                🎒
-                            </button>
-                        </div>
+                        {/* BAG BUTTON */}
+                        <button 
+                            onClick={() => { setBagOpen(!bagOpen); setLastBagInteraction(Date.now()); }}
+                            className={`w-16 h-16 bg-slate-800 border-2 ${bagOpen || data.activeModal === 'sell' ? 'border-yellow-400 bg-slate-700' : 'border-slate-500'} rounded flex items-center justify-center text-3xl hover:bg-slate-700 transition-colors pointer-events-auto shadow-lg active:scale-95`}
+                        >
+                            🎒
+                        </button>
 
                         {/* EQUIPPED WEAPON */}
                         <div 
@@ -444,7 +486,7 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
                 </div>
 
             </div>
-             <div className="absolute top-4 left-1/2 -translate-x-1/2 text-slate-500 text-xs">PRESS [ESC] TO TUNE GAME</div>
+             <div className="absolute top-4 left-1/2 -translate-x-1/2 text-slate-500 text-xs">{data.isMobile ? "" : "PRESS [ESC] TO TUNE GAME"}</div>
         </div>
     );
 };

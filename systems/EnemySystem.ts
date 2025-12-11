@@ -1,4 +1,5 @@
 
+
 import { GameState, GameBalance, EnemyType, ItemTier, AmmoType, WeaponType } from '../types.ts';
 import { MAP_SIZE, POI_LOCATIONS } from '../constants.ts';
 import { distance, normalize, resolveRectCollision } from '../utils/math.ts';
@@ -29,8 +30,8 @@ export const spawnEnemy = (state: GameState, balance: GameBalance, overrideType?
     state.enemies.push({ id: Math.random().toString(), pos: spawnPos, velocity: {x:0,y:0}, radius: stats.radius, rotation: 0, dead: false, type: type, hp: stats.hp, maxHp: stats.hp, attackCooldown: 0, slowedUntil: 0, poisonDots: [], spawnOrigin: { ...spawnPos }, lastRedSummon: type === EnemyType.Boss ? state.gameTime : undefined, lastBlueSummon: type === EnemyType.Boss ? state.gameTime : undefined });
 };
 
-export const updateEnemies = (state: GameState, balance: GameBalance, dt: number) => {
-    const SPEED_SCALE = 0.1;
+export const updateEnemies = (state: GameState, balance: GameBalance, dt: number, tick: number) => {
+    const SPEED_SCALE = 0.25; // Boosted from 0.1 to match high-fps feel
     const p = state.player;
     const isPlaying = state.gamePhase === 'playing';
 
@@ -129,7 +130,10 @@ export const updateEnemies = (state: GameState, balance: GameBalance, dt: number
         }
         
         if (state.gameTime < enemy.slowedUntil) { enemySpeed *= 0.5; if (Math.random() < 0.1) addParticle(state, enemy.pos, '#93c5fd', 'snow', 1, 0.5); }
-        enemy.pos.x += (moveVec.x * enemySpeed) + sepVector.x; enemy.pos.y += (moveVec.y * enemySpeed) + sepVector.y;
+        
+        // APPLY TICK SCALING TO MOVEMENT
+        enemy.pos.x += ((moveVec.x * enemySpeed) + sepVector.x) * tick; 
+        enemy.pos.y += ((moveVec.y * enemySpeed) + sepVector.y) * tick;
 
         if (isPlaying && !state.exitAnim.active) { 
             const minDistToPlayer = enemy.radius + balance.player.radius; 
