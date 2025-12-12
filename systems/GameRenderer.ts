@@ -805,9 +805,10 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
         ctx.translate(sx, sy);
 
         const isGlowing = state.bossState.readyToExtract || (currentTotal >= bronze && !state.bossState.active && !state.bossState.summonRequested);
-        
+        const isExtracting = state.extractionProgress > 0 || state.exitAnim.active;
+
         // Vibration
-        if (isGlowing) {
+        if (isGlowing && !isExtracting) {
             const cycle = 2300;
             const dur = 150;
             const t = state.gameTime % cycle;
@@ -1010,7 +1011,7 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
             ctx.restore(); // Pop back to Screen Space (Identity)
             ctx.save();
             
-            // Left Joystick
+            // Left Joystick (Movement) - Now the only one
             if (state.inputs.mobile.joysticks.left.active) {
                 const j = state.inputs.mobile.joysticks.left;
                 ctx.beginPath();
@@ -1024,23 +1025,6 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
                 ctx.beginPath();
                 ctx.arc(j.current.x, j.current.y, 20, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-                ctx.fill();
-            }
-
-            // Right Joystick
-            if (state.inputs.mobile.joysticks.right.active) {
-                const j = state.inputs.mobile.joysticks.right;
-                ctx.beginPath();
-                ctx.arc(j.origin.x, j.origin.y, 40, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-                ctx.fill();
-                ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                ctx.beginPath();
-                ctx.arc(j.current.x, j.current.y, 20, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
                 ctx.fill();
             }
         }

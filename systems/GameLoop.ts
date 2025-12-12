@@ -1,6 +1,6 @@
 
 
-import { GameState, GameBalance, Vector2, WeaponType, EnemyType, ItemTier, AmmoType, Loot, GearType, Loadout, WorldPOI } from '../types.ts';
+import { GameState, GameBalance, Vector2, WeaponType, EnemyType, ItemTier, AmmoType, Loot, GearType, Loadout, WorldPOI, Enemy } from '../types.ts';
 import { MAP_SIZE, POI_LOCATIONS, BUNKER_INT_SIZE, BUNKER_ZONES, LOOT_CONFIG } from '../constants.ts';
 import { distance, normalize, resolveRectCollision } from '../utils/math.ts';
 import { generateMap } from './MapSystem.ts';
@@ -8,6 +8,23 @@ import { spawnLoot, generateLootContent } from './LootSystem.ts';
 import { handleShoot } from './CombatSystem.ts';
 import { spawnEnemy, updateEnemies } from './EnemySystem.ts';
 import { addParticle, addFloatingText } from './ParticleSystem.ts';
+
+const rotateTowards = (current: number, target: number, maxStep: number): number => {
+    let diff = target - current;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    
+    let newAngle = current;
+    if (Math.abs(diff) <= maxStep) {
+        newAngle = target;
+    } else {
+        newAngle = current + Math.sign(diff) * maxStep;
+    }
+    
+    while (newAngle > Math.PI) newAngle -= Math.PI * 2;
+    while (newAngle < -Math.PI) newAngle += Math.PI * 2;
+    return newAngle;
+};
 
 export const createInitialState = (balance: GameBalance, loadout?: Loadout): GameState => {
     // Generate Map
@@ -91,6 +108,7 @@ export const createInitialState = (balance: GameBalance, loadout?: Loadout): Gam
         enemies: [], projectiles: [], particles: [], loot: [], floatingTexts: [], turrets: [], decoys: [], worldMedkits: [], worldKeys: [], magicDrops: [], clones: [], puddles: [],
         camera: { x: 0, y: 0 }, screenShake: 0, snow: snow,
         gameTime: 0, wave: 1, waveTimer: balance.enemies.waveDuration * 1.5, nextSpawnTime: 0, depositedCoins: 0, hordeMode: { active: false, timeLeft: 0 },
+        isAutoFiring: false,
         isMobile: isMobile,
         inputs: { 
             keys: new Set(), 
@@ -114,6 +132,12 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
     // Calculate tick factor normalized to 60fps (16.66ms)
     // if dt = 33ms (30fps), tick = 2.0 (move twice as far per frame)
     const tick = dt / 16.667; 
+    
+    // Rotation speed: 360 deg (2PI) in 0.5s => 4PI rad/s
+    const rotationSpeed = (4 * Math.PI) * (dt / 1000);
+
+    // Reset auto-firing state for this frame
+    state.isAutoFiring = false;
 
     const p = state.player;
     const SPEED_SCALE = 0.25; // Boosted from 0.1 to match high-fps feel
@@ -316,11 +340,17 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         bPos.x = Math.max(balance.player.radius, Math.min(BUNKER_INT_SIZE.w - balance.player.radius, bPos.x)); bPos.y = Math.max(balance.player.radius, Math.min(BUNKER_INT_SIZE.h - balance.player.radius, bPos.y));
         p.pos = { ...bPos };
         
-        if (state.isMobile && state.inputs.mobile.joysticks.right.active) {
-            p.angle = Math.atan2(state.inputs.mobile.aimVec.y, state.inputs.mobile.aimVec.x);
+        // In Bunker: Aim in direction of movement
+        if (Math.abs(normMove.x) > 0.001 || Math.abs(normMove.y) > 0.001) {
+             const targetAngle = Math.atan2(normMove.y, normMove.x);
+             p.angle = rotateTowards(p.angle, targetAngle, rotationSpeed);
         } else {
-            const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
-            p.angle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
+             // Or mouse if on PC
+             if (!state.isMobile) {
+                const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
+                const targetAngle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
+                p.angle = rotateTowards(p.angle, targetAngle, rotationSpeed);
+             }
         }
 
         if (distance(bPos, BUNKER_ZONES.EXIT) < BUNKER_ZONES.EXIT.radius) {
@@ -581,28 +611,45 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                 else { const r = poi.radius || 100; const dist = distance(p.pos, poi); if (dist < r + balance.player.radius) { const pushDir = normalize({ x: p.pos.x - poi.x, y: p.pos.y - poi.y }); p.pos.x = poi.x + pushDir.x * (r + balance.player.radius); p.pos.y = poi.y + pushDir.y * (r + balance.player.radius); } } 
             }
             
-            // AIMING LOGIC UPDATE FOR MOBILE
-            if (state.isMobile) {
-                if (state.inputs.mobile.joysticks.right.active) {
-                    p.angle = Math.atan2(state.inputs.mobile.aimVec.y, state.inputs.mobile.aimVec.x);
-                    if (state.inputs.mobile.isFiring) {
-                        handleShoot(state, balance);
-                        state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
-                    }
-                } else if (state.inputs.mobile.joysticks.left.active) {
-                     // Aim in movement direction if not aiming
-                     if (Math.abs(normMove.x) > 0.001 || Math.abs(normMove.y) > 0.001) {
-                         p.angle = Math.atan2(normMove.y, normMove.x);
-                     }
+            // --- AUTO AIM & AUTO FIRE LOGIC ---
+            // 1. Identify closest enemy that is alive, onscreen, and in range.
+            const weaponRange = balance.weapons[p.weapon].range;
+            const viewW = window.innerWidth;
+            const viewH = window.innerHeight;
+            const cam = state.camera;
+            
+            let closestEnemy: Enemy | null = null;
+            let minEnemyDist = weaponRange; // Only consider within range
+
+            for (const enemy of state.enemies) {
+                if (enemy.dead) continue;
+                
+                // Screen bounds check (with 100px padding)
+                if (enemy.pos.x < cam.x - 100 || enemy.pos.x > cam.x + viewW + 100 || 
+                    enemy.pos.y < cam.y - 100 || enemy.pos.y > cam.y + viewH + 100) continue;
+
+                const d = distance(p.pos, enemy.pos);
+                if (d <= minEnemyDist) {
+                    minEnemyDist = d;
+                    closestEnemy = enemy;
                 }
-                // Else: Do nothing, preserve existing p.angle
+            }
+
+            if (closestEnemy) {
+                // Auto Face Enemy
+                const targetAngle = Math.atan2(closestEnemy.pos.y - p.pos.y, closestEnemy.pos.x - p.pos.x);
+                p.angle = rotateTowards(p.angle, targetAngle, rotationSpeed);
+                // Auto Fire
+                handleShoot(state, balance);
+                state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
+                state.isAutoFiring = true;
             } else {
-                const worldMouse = { x: state.inputs.mouse.x + state.camera.x, y: state.inputs.mouse.y + state.camera.y };
-                p.angle = Math.atan2(worldMouse.y - p.pos.y, worldMouse.x - p.pos.x);
-                if (state.inputs.keys.has('mousedown')) {
-                    handleShoot(state, balance);
-                    state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
+                // No enemy? Auto Face Movement Direction
+                if (Math.abs(p.velocity.x) > 0.1 || Math.abs(p.velocity.y) > 0.1) {
+                    const targetAngle = Math.atan2(p.velocity.y, p.velocity.x);
+                    p.angle = rotateTowards(p.angle, targetAngle, rotationSpeed);
                 }
+                // If stopped and no enemy, keep current facing angle
             }
         }
 

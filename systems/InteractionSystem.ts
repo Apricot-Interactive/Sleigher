@@ -1,4 +1,5 @@
 
+
 import { GameState, GameBalance, ItemTier, WeaponType, Loot, InventoryItem } from '../types.ts';
 import { distance } from '../utils/math.ts';
 import { BUNKER_ZONES, POI_LOCATIONS } from '../constants.ts';
@@ -16,7 +17,8 @@ export const calculateInteractionFlags = (state: GameState, balance: GameBalance
     const isSummoning = state.bossState.summonRequested;
     const isTransferring = state.transferState.active;
 
-    const showInfuse = isNearSleigh && !isExtracting && !isBossActive && !isSummoning;
+    // Added !isTransferring to prevent prompt while active
+    const showInfuse = isNearSleigh && !isExtracting && !isBossActive && !isSummoning && !isTransferring;
     const showSummon = isNearSleigh && state.depositedCoins >= bronze && !isBossActive && !isExtracting && !isSummoning && !isTransferring;
     
     let showSell = false;

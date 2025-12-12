@@ -317,6 +317,7 @@ export interface GameState {
     depositedCoins: number;
     hordeMode: { active: boolean; timeLeft: number };
     
+    isAutoFiring: boolean;
     isMobile: boolean;
     inputs: {
         keys: Set<string>;

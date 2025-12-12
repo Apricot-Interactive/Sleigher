@@ -93,20 +93,19 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
 
     return (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-auto overflow-hidden">
-            <div className="relative mb-8 max-w-[95vw]">
-                <h1 className="text-[12vw] sm:text-7xl md:text-9xl font-black text-red-600 tracking-tighter transform -skew-x-12 scale-y-150 origin-bottom drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] border-text whitespace-nowrap">
+            <div className="relative mb-4 md:mb-8 w-full flex justify-center">
+                <h1 className="text-[20vw] sm:text-8xl md:text-9xl font-black text-red-600 tracking-tighter transform -skew-x-12 -translate-x-2 sm:-translate-x-4 scale-y-150 origin-center drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] border-text whitespace-nowrap text-center">
                     SLEIGHER
                 </h1>
             </div>
 
-            {/* Increased vertical padding to py-20 to ensure scaled selection box doesn't clip */}
-            <div className="flex flex-wrap justify-center gap-4 mb-4 items-center w-full max-h-[60vh] overflow-y-auto px-4 py-20">
+            <div className="flex flex-row justify-center gap-2 sm:gap-4 mb-4 items-center w-full max-h-[60vh] overflow-y-auto px-2 py-4 md:py-20">
                 {/* FNG Slot */}
                 <button 
                     onClick={() => setSelectedHeroIndex(-1)}
                     className={`flex flex-col items-center transition-transform hover:scale-105 shrink-0 ${selectedHeroIndex === -1 ? 'scale-110 z-10' : 'opacity-80'}`}
                 >
-                    <div className={`w-32 h-40 bg-slate-900 border-4 rounded-lg flex flex-col relative overflow-hidden ${selectedHeroIndex === -1 ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]' : 'border-slate-700'}`}>
+                    <div className={`w-[28vw] h-[35vw] sm:w-32 sm:h-40 bg-slate-900 border-4 rounded-lg flex flex-col relative overflow-hidden ${selectedHeroIndex === -1 ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]' : 'border-slate-700'}`}>
                         {/* Top Section: Icons */}
                         <div className="flex w-full h-[40%] border-b border-slate-700/50">
                             {/* Left: Weapon */}
@@ -133,23 +132,23 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
 
                         {selectedHeroIndex === -1 && <div className="absolute bottom-0 w-full bg-yellow-600 text-black font-bold text-xs text-center py-1 uppercase">Selected</div>}
                     </div>
-                    <div className="mt-2 font-black text-white uppercase tracking-wider">FNG</div>
-                    <div className="text-slate-400 text-sm font-bold">(Rank: {fngScore})</div>
+                    <div className="mt-2 font-black text-white uppercase tracking-wider text-xs sm:text-base">FNG</div>
+                    <div className="text-slate-400 text-xs sm:text-sm font-bold">(Rank: {fngScore})</div>
                 </button>
 
                 {/* Veteran Slots */}
-                {[0,1,2,3].map(i => {
+                {[0,1].map(i => {
                     const vet = veterans[i];
                     const isSelected = selectedHeroIndex === i;
                     
                     if (!vet) {
                         return (
                             <div key={i} className="flex flex-col items-center opacity-40 grayscale shrink-0">
-                                <div className="w-32 h-40 bg-slate-900 border-4 border-slate-700 rounded-lg flex items-center justify-center border-dashed">
-                                    <span className="text-4xl text-slate-700">🔒</span>
+                                <div className="w-[28vw] h-[35vw] sm:w-32 sm:h-40 bg-slate-900 border-4 border-slate-700 rounded-lg flex items-center justify-center border-dashed">
+                                    <span className="text-2xl sm:text-4xl text-slate-700">🔒</span>
                                 </div>
-                                <div className="mt-2 font-black text-white uppercase tracking-wider">VETERAN</div>
-                                <div className="text-transparent text-sm font-bold">(-)</div>
+                                <div className="mt-2 font-black text-white uppercase tracking-wider text-xs sm:text-base">VETERAN</div>
+                                <div className="text-transparent text-xs sm:text-sm font-bold">(-)</div>
                             </div>
                         );
                     }
@@ -160,7 +159,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
                             onClick={() => setSelectedHeroIndex(i)}
                             className={`flex flex-col items-center transition-transform hover:scale-105 shrink-0 ${isSelected ? 'scale-110 z-10' : 'opacity-90'}`}
                         >
-                            <div className={`w-32 h-40 bg-slate-900 border-4 rounded-lg flex flex-col relative overflow-hidden ${isSelected ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]' : 'border-slate-700'}`}>
+                            <div className={`w-[28vw] h-[35vw] sm:w-32 sm:h-40 bg-slate-900 border-4 rounded-lg flex flex-col relative overflow-hidden ${isSelected ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.5)]' : 'border-slate-700'}`}>
                                 
                                 {/* Top Section: Icons */}
                                 <div className="flex w-full h-[40%] border-b border-black/20">
@@ -187,8 +186,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
                                 
                                 {isSelected && <div className="absolute bottom-0 w-full bg-yellow-600 text-black font-bold text-xs text-center py-1 uppercase">Selected</div>}
                             </div>
-                            <div className="mt-2 font-black text-white uppercase tracking-wider">VETERAN</div>
-                            <div className="text-slate-400 text-sm font-bold">(Rank: {vet.score})</div>
+                            <div className="mt-2 font-black text-white uppercase tracking-wider text-xs sm:text-base">VETERAN</div>
+                            <div className="text-slate-400 text-xs sm:text-sm font-bold">(Rank: {vet.score})</div>
                         </button>
                     );
                 })}

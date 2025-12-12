@@ -189,7 +189,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
           e.preventDefault();
 
           const s = gameStateRef.current;
-          const width = window.innerWidth;
           
           for(let i=0; i<e.changedTouches.length; i++) {
               const t = e.changedTouches[i];
@@ -199,15 +198,9 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
               touchStartTimesRef.current.set(t.identifier, Date.now());
               touchStartPositionsRef.current.set(t.identifier, {x, y});
 
-              if (x < width / 2) {
-                  if (!s.inputs.mobile.joysticks.left.active) {
-                      s.inputs.mobile.joysticks.left = { origin: {x,y}, current: {x,y}, active: true, id: t.identifier };
-                  }
-              } else {
-                  if (!s.inputs.mobile.joysticks.right.active) {
-                      s.inputs.mobile.joysticks.right = { origin: {x,y}, current: {x,y}, active: true, id: t.identifier };
-                      s.inputs.mobile.isFiring = true;
-                  }
+              // Create floating joystick anywhere touched if not already active
+              if (!s.inputs.mobile.joysticks.left.active) {
+                  s.inputs.mobile.joysticks.left = { origin: {x,y}, current: {x,y}, active: true, id: t.identifier };
               }
           }
       };
@@ -231,12 +224,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                   } else {
                       s.inputs.mobile.moveVec = { x: 0, y: 0 };
                   }
-              }
-              if (s.inputs.mobile.joysticks.right.id === t.identifier) {
-                  s.inputs.mobile.joysticks.right.current = { x: t.clientX, y: t.clientY };
-                  const dx = t.clientX - s.inputs.mobile.joysticks.right.origin.x;
-                  const dy = t.clientY - s.inputs.mobile.joysticks.right.origin.y;
-                  s.inputs.mobile.aimVec = { x: dx, y: dy };
               }
           }
       };
@@ -272,11 +259,6 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                    s.inputs.mobile.joysticks.left.active = false;
                    s.inputs.mobile.joysticks.left.id = null;
                    s.inputs.mobile.moveVec = { x: 0, y: 0 };
-               }
-               if (s.inputs.mobile.joysticks.right.id === t.identifier) {
-                   s.inputs.mobile.joysticks.right.active = false;
-                   s.inputs.mobile.joysticks.right.id = null;
-                   s.inputs.mobile.isFiring = false;
                }
                
                touchStartTimesRef.current.delete(t.identifier);
@@ -549,7 +531,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                        victoryData: s.gamePhase === 'victory' ? { medal: s.bossState.tier || 'Bronze', wave: s.wave } : null,
                        isCombatActive: s.enemies.length > 0,
                        isMoving: Math.abs(s.player.velocity.x) > 0.1 || Math.abs(s.player.velocity.y) > 0.1,
-                       isFiring: s.inputs.keys.has('mousedown') || s.inputs.mobile.isFiring,
+                       isFiring: s.inputs.keys.has('mousedown') || s.inputs.mobile.isFiring || s.isAutoFiring,
                        activeModal: activeModal,
                        isMobile: s.isMobile
                    });

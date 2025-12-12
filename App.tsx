@@ -79,7 +79,7 @@ export default function App() {
 
              setVeterans(prev => {
                  const newList = [...prev];
-                 if (newList.length >= 4) {
+                 if (newList.length >= 2) {
                      // Find lowest score
                      let minScore = Infinity;
                      let minIndex = -1;
