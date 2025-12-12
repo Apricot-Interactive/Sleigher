@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GameBalance, HeroRecord, InventoryItem, ItemTier, WeaponType } from '../types.ts';
 import { WeaponIcon } from './WeaponIcon.tsx';
@@ -40,6 +38,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
     const [selectedHeroIndex, setSelectedHeroIndex] = useState<number>(-1);
 
     const getScore = (tier: ItemTier) => {
+        if (tier === ItemTier.White) return 0;
         if (tier === ItemTier.Grey) return 1;
         if (tier === ItemTier.Green) return 3;
         if (tier === ItemTier.Blue) return 6;
@@ -48,6 +47,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
     };
 
     const getItemStyles = (tier?: ItemTier) => {
+        if (tier === ItemTier.White) return 'bg-slate-200/60 border-white text-white';
         if (tier === ItemTier.Green) return 'bg-green-900/60 border-green-500 text-green-100';
         if (tier === ItemTier.Blue) return 'bg-blue-900/60 border-blue-500 text-blue-100';
         if (tier === ItemTier.Red) return 'bg-red-900/60 border-red-500 text-red-100';
@@ -57,19 +57,23 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
     const renderGearIcon = (item: InventoryItem | null) => {
         if (!item) return <div className="text-transparent">.</div>;
         let icon = '🛡️';
-        if (item.stats?.type === 'pen') icon = '✒️';
-        else if (item.stats?.type === 'turret') icon = '🤖';
+        if (item.stats?.type === 'vest') icon = '🦺';
+        else if (item.stats?.type === 'speed_shoes') icon = '👟';
+        else if (item.stats?.type === 'mines') icon = '💣';
         else if (item.stats?.type === 'snowman') icon = '⛄';
-        else if (item.stats?.type === 'medkit') icon = '🏥';
-        else if (item.stats?.type === 'shoes') icon = '👟';
+        else if (item.stats?.type === 'elf_hat') icon = '🧢';
+        else if (item.stats?.type === 'turret') icon = '🤖';
+        else if (item.stats?.type === 'regen') icon = '💗';
         else if (item.stats?.type === 'lightning') icon = '⚡';
-        else if (item.stats?.type === 'beaker') icon = '🧪';
-        else if (item.stats?.type === 'santa_hat') icon = '🎅';
+        else if (item.stats?.type === 'tesla') icon = '🔋';
+        else if (item.stats?.type === 'pen') icon = '✒️';
+        else if (item.stats?.type === 'sleighbells') icon = '🔔';
+        else if (item.stats?.type === 'reinforce') icon = '👮';
         return <div className="text-2xl leading-none flex items-center justify-center h-full w-full drop-shadow-md">{icon}</div>;
     };
 
     // Calculate FNG Score
-    let fngScore = 1; // Grey Pistol
+    let fngScore = 0; // White Snowball
     if (fngGear && fngGear.tier !== undefined) fngScore += getScore(fngGear.tier);
 
     const handleDeploy = () => {
@@ -110,8 +114,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
                         <div className="flex w-full h-[40%] border-b border-slate-700/50">
                             {/* Left: Weapon */}
                             <div className="w-1/2 p-1 flex items-center justify-center border-r border-slate-700/50">
-                                <div className={`w-full h-full border rounded flex items-center justify-center ${getItemStyles(ItemTier.Grey)}`} title="Grey Pistol">
-                                    <WeaponIcon type={WeaponType.Pistol} className="w-8 h-8" />
+                                <div className={`w-full h-full border rounded flex items-center justify-center ${getItemStyles(ItemTier.White)}`} title="White Snowball">
+                                    <WeaponIcon type={WeaponType.Snowball} className="w-8 h-8" />
                                 </div>
                             </div>
                             {/* Right: Gear */}
@@ -127,7 +131,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({ balance, veterans, fngGear }
                         
                         {/* Bottom Section: Hero Preview */}
                         <div className="flex-1 flex items-center justify-center">
-                            <HeroPreview balance={balance} tier={ItemTier.Grey} weaponType={WeaponType.Pistol} />
+                            <HeroPreview balance={balance} tier={ItemTier.White} weaponType={WeaponType.Snowball} />
                         </div>
 
                         {selectedHeroIndex === -1 && <div className="absolute bottom-0 w-full bg-yellow-600 text-black font-bold text-xs text-center py-1 uppercase">Selected</div>}

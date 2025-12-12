@@ -77,6 +77,7 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
     const refreshTimer = () => setLastBagInteraction(Date.now());
 
     const getTierColor = (tier?: ItemTier) => {
+        if (tier === ItemTier.White) return 'border-white text-white';
         if (tier === ItemTier.Grey) return 'border-slate-400 text-slate-400';
         if (tier === ItemTier.Green) return 'border-green-400 text-green-400';
         if (tier === ItemTier.Blue) return 'border-blue-400 text-blue-400';
@@ -86,15 +87,20 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
 
     const renderGearIcon = (item: InventoryItem | null) => {
         if (!item) return <div className="text-transparent">.</div>;
-        let icon = '🛡️';
-        if (item.stats?.type === 'pen') icon = '✒️';
-        else if (item.stats?.type === 'turret') icon = '🤖';
+        let icon = '⚙️';
+        if (item.stats?.type === 'vest') icon = '🦺';
+        else if (item.stats?.type === 'speed_shoes') icon = '👟';
+        else if (item.stats?.type === 'mines') icon = '💣';
         else if (item.stats?.type === 'snowman') icon = '⛄';
-        else if (item.stats?.type === 'medkit') icon = '🏥';
-        else if (item.stats?.type === 'shoes') icon = '👟';
+        else if (item.stats?.type === 'elf_hat') icon = '🧢';
+        else if (item.stats?.type === 'turret') icon = '🤖';
+        else if (item.stats?.type === 'regen') icon = '💗';
         else if (item.stats?.type === 'lightning') icon = '⚡';
-        else if (item.stats?.type === 'beaker') icon = '🧪';
-        else if (item.stats?.type === 'santa_hat') icon = '🎅';
+        else if (item.stats?.type === 'tesla') icon = '🔋';
+        else if (item.stats?.type === 'pen') icon = '✒️';
+        else if (item.stats?.type === 'sleighbells') icon = '🔔';
+        else if (item.stats?.type === 'reinforce') icon = '👮';
+        
         return <div className="text-2xl leading-none flex items-center justify-center h-full w-full drop-shadow-md">{icon}</div>;
     };
 
@@ -105,7 +111,10 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
         e.stopPropagation(); // Prevent bubbling to window which triggers game firing
         window.dispatchEvent(new CustomEvent('ui-interaction-start'));
         
-        if (!item) return;
+        if (!item && location !== 'equipped') return; // Can't select empty slot except for equipped check
+        // Check if equipped weapon is actually present
+        if (location === 'equipped' && !data.weapon) return;
+
         setPressingTarget({ location, index });
         longPressTimerRef.current = window.setTimeout(() => {
             setPopupItem({ item, location, index });
@@ -145,6 +154,14 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
         }
     };
 
+    const handleEquippedWeaponClick = () => {
+        if (!data.weapon) return;
+        
+        if (data.activeModal === 'sell') {
+            window.dispatchEvent(new CustomEvent('sell-equipped-weapon'));
+        }
+    };
+
     const handleGearSlotClick = (index: number) => {
         refreshTimer();
         if (data.activeModal === 'sell') return; // Can't edit gear while selling
@@ -180,7 +197,7 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
         window.dispatchEvent(new CustomEvent('mobile-action', { detail: { action } }));
     };
 
-    const weaponColorClass = getTierColor(data.weaponTier).split(' ')[1]; // Extract text color class
+    const weaponColorClass = data.weapon ? getTierColor(data.weaponTier).split(' ')[1] : 'text-slate-600'; 
 
     // --- MODAL RENDERING ---
     let modalContent = null;
@@ -200,21 +217,35 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
         const tier = data.weaponTier;
         const nextTier = tier < ItemTier.Red ? tier + 1 : null;
         let upgradeCost = 0;
-        if (tier === ItemTier.Grey) upgradeCost = 100;
+        if (tier === ItemTier.White) upgradeCost = 50;
+        else if (tier === ItemTier.Grey) upgradeCost = 100;
         else if (tier === ItemTier.Green) upgradeCost = 500;
         else if (tier === ItemTier.Blue) upgradeCost = 2500;
         
         const canAfford = data.coins >= upgradeCost;
-        const tierNames = ['GREY', 'GREEN', 'BLUE', 'RED'];
+        
+        const tierNames: Record<number, string> = {
+            [ItemTier.White]: 'SNOWBALL',
+            [ItemTier.Grey]: 'GREY',
+            [ItemTier.Green]: 'GREEN',
+            [ItemTier.Blue]: 'BLUE',
+            [ItemTier.Red]: 'RED'
+        };
         
         const body = (
              <>
                 <div className="flex flex-col items-center gap-1 mb-4">
-                     <div className={`text-xl font-bold ${getTierColor(tier)}`}>{tierNames[tier]} {data.weapon}</div>
-                     <div className="text-slate-400 text-xs uppercase">Current Weapon</div>
+                     {data.weapon ? (
+                         <>
+                            <div className={`text-xl font-bold ${getTierColor(tier)}`}>{tierNames[tier]} {data.weapon}</div>
+                            <div className="text-slate-400 text-xs uppercase">Current Weapon</div>
+                         </>
+                     ) : (
+                         <div className="text-slate-500 text-sm">No Weapon Equipped</div>
+                     )}
                  </div>
                  
-                 {nextTier !== null ? (
+                 {data.weapon && nextTier !== null ? (
                      <button 
                         onClick={handleUpgradeWeapon}
                         disabled={!canAfford}
@@ -225,7 +256,7 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
                      </button>
                  ) : (
                      <div className="w-full py-4 bg-slate-800 border-2 border-slate-600 text-yellow-500 font-bold uppercase text-center rounded">
-                         Max Level Reached
+                         {data.weapon ? "Max Level Reached" : "Equip a weapon first"}
                      </div>
                  )}
              </>
@@ -236,7 +267,7 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
     else if (data.activeModal === 'sell') {
         const body = (
             <div className="text-center text-slate-300 font-bold">
-                Click an item in your inventory to sell it
+                Click an item (bag or equipped) to sell it
             </div>
         );
         modalContent = renderBunkerModal("SELL", body);
@@ -402,7 +433,7 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
                 {/* BOTTOM RIGHT: WEAPON & BAG */}
                 <div className="flex flex-col items-end gap-1 relative" onClick={e => e.stopPropagation()}>
                     <div className={`text-sm uppercase tracking-widest font-bold ${weaponColorClass}`}>
-                        {ItemTier[data.weaponTier]} {data.weapon}
+                        {data.weapon ? `${ItemTier[data.weaponTier]} ${data.weapon}` : "UNARMED"}
                     </div>
                     
                     <div className="flex gap-2 items-end relative">
@@ -465,10 +496,11 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
 
                         {/* EQUIPPED WEAPON */}
                         <div 
-                            onPointerDown={(e) => handlePointerDown(e, { type: 'weapon', weaponType: data.weapon, tier: data.weaponTier } as any, 'equipped', -1)}
+                            onPointerDown={(e) => handlePointerDown(e, data.weapon ? { type: 'weapon', weaponType: data.weapon, tier: data.weaponTier } as any : null, 'equipped', -1)}
                             onPointerUp={handlePointerUp}
                             onPointerLeave={handlePointerUp}
-                            className={`w-16 h-16 bg-slate-900/90 border-2 ${getTierColor(data.weaponTier)} rounded flex items-center justify-center cursor-pointer pointer-events-auto relative overflow-hidden`}
+                            onClick={handleEquippedWeaponClick}
+                            className={`w-16 h-16 bg-slate-900/90 border-2 ${data.weapon ? getTierColor(data.weaponTier) : 'border-slate-700 border-dashed'} rounded flex items-center justify-center cursor-pointer pointer-events-auto relative overflow-hidden`}
                         >
                             {pressingTarget?.location === 'equipped' && (
                                 <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -477,13 +509,23 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
                                     </svg>
                                 </div>
                             )}
-                            <WeaponIcon type={data.weapon} className="w-10 h-10" />
+                            {data.weapon && <WeaponIcon type={data.weapon} className="w-10 h-10" />}
+                            {data.activeModal === 'sell' && data.weapon && (
+                                <div className="absolute bottom-0 w-full bg-black/60 text-yellow-400 text-[9px] text-center font-bold">
+                                    SELL
+                                </div>
+                            )}
                         </div>
 
                         {/* AMMO */}
                         <div className="flex flex-col justify-center h-16 px-2">
-                            <div className="text-3xl font-black text-white leading-none">{data.ammo}</div>
-                            <div className="text-sm text-white font-bold">/ {data.maxAmmo}</div>
+                            {data.weapon && data.weapon !== 'Sword' && (
+                                <>
+                                    <div className="text-3xl font-black text-white leading-none">{data.ammo}</div>
+                                    <div className="text-sm text-white font-bold">/ {data.maxAmmo}</div>
+                                </>
+                            )}
+                            {!data.weapon && <div className="text-xs text-slate-500 font-bold uppercase">UNARMED</div>}
                         </div>
                     </div>
                 </div>

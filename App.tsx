@@ -47,6 +47,7 @@ export default function App() {
   };
 
   const getScore = (tier: ItemTier) => {
+      if (tier === ItemTier.White) return 0;
       if (tier === ItemTier.Grey) return 1;
       if (tier === ItemTier.Green) return 3;
       if (tier === ItemTier.Blue) return 6;
@@ -102,8 +103,8 @@ export default function App() {
         if (index === -1) {
             // FNG
             loadout = {
-                weapon: WeaponType.Pistol,
-                weaponTier: ItemTier.Grey,
+                weapon: WeaponType.Snowball,
+                weaponTier: ItemTier.White,
                 gear: [fngGear, null, null, null]
             };
         } else {

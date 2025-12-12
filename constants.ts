@@ -10,21 +10,25 @@ export const GRID_CELL_SIZE = 2500;
 // ==========================================
 
 export const GEAR_DROPS = [
-    // GREEN (Tier 1) - 50% Base
-    { type: 'gear', id: 'shield', tier: ItemTier.Green, stats: { type: 'shield', hpBonus: 300 }, label: 'Armor (+300 HP)' },
-    { type: 'key', id: 'key', tier: ItemTier.Green, label: 'Bunker Key' },
-    
-    // BLUE (Tier 2) - 35% Base
-    { type: 'gear', id: 'pen', tier: ItemTier.Blue, stats: { type: 'pen' }, label: 'Revive Pen' },
-    { type: 'gear', id: 'turret', tier: ItemTier.Blue, stats: { type: 'turret' }, label: 'Auto Turret' },
-    { type: 'gear', id: 'medkit', tier: ItemTier.Blue, stats: { type: 'medkit' }, label: 'Auto Medkit' },
-    { type: 'gear', id: 'shoes', tier: ItemTier.Blue, stats: { type: 'shoes' }, label: 'Speed Shoes' },
-    { type: 'gear', id: 'lightning', tier: ItemTier.Blue, stats: { type: 'lightning' }, label: 'Lightning Trigger' },
-    { type: 'gear', id: 'beaker', tier: ItemTier.Blue, stats: { type: 'beaker' }, label: 'Acid Beaker' },
+    // GREY (Tier 0)
+    { type: 'gear', id: 'vest', tier: ItemTier.Grey, stats: { type: 'vest', hpBonus: 300 }, label: 'Tac-Vest (+300 HP)' },
+    { type: 'gear', id: 'speed_shoes', tier: ItemTier.Grey, stats: { type: 'speed_shoes' }, label: 'Speed Shoes' },
+    { type: 'gear', id: 'mines', tier: ItemTier.Grey, stats: { type: 'mines' }, label: 'Mine Layer' },
 
-    // RED (Tier 3) - 15% Base
-    { type: 'gear', id: 'snowman', tier: ItemTier.Red, stats: { type: 'snowman' }, label: 'Snowman Decoy' },
-    { type: 'gear', id: 'santa_hat', tier: ItemTier.Red, stats: { type: 'santa_hat' }, label: 'Santa Clone' }
+    // GREEN (Tier 1)
+    { type: 'gear', id: 'snowman', tier: ItemTier.Green, stats: { type: 'snowman' }, label: 'Snowman Decoy' },
+    { type: 'gear', id: 'elf_hat', tier: ItemTier.Green, stats: { type: 'elf_hat' }, label: 'Elf Hat (+50% Magic)' },
+    { type: 'gear', id: 'turret', tier: ItemTier.Green, stats: { type: 'turret' }, label: 'Auto Turret' },
+    
+    // BLUE (Tier 2)
+    { type: 'gear', id: 'regen', tier: ItemTier.Blue, stats: { type: 'regen' }, label: 'Regen Module' },
+    { type: 'gear', id: 'lightning', tier: ItemTier.Blue, stats: { type: 'lightning' }, label: 'Lightning Trigger' },
+    { type: 'gear', id: 'tesla', tier: ItemTier.Blue, stats: { type: 'tesla' }, label: 'Tesla Coil' },
+
+    // RED (Tier 3) - Craft Only / Cheat Only
+    { type: 'gear', id: 'pen', tier: ItemTier.Red, stats: { type: 'pen' }, label: 'Self-Revive Pen' },
+    { type: 'gear', id: 'sleighbells', tier: ItemTier.Red, stats: { type: 'sleighbells' }, label: 'Sleighbells' },
+    { type: 'gear', id: 'reinforce', tier: ItemTier.Red, stats: { type: 'reinforce' }, label: 'Reinforcements' }
 ];
 
 export const LOOT_CONFIG = {
@@ -146,6 +150,78 @@ export const INITIAL_GAME_BALANCE: GameBalance = {
       projectileSpeed: 12, 
       spread: 0.7,
       magSize: 100,
+    },
+    [WeaponType.Snowball]: {
+      damage: 5,
+      fireRate: 1000,
+      reloadTime: 1000,
+      range: 500,
+      projectileSpeed: 15,
+      spread: 0.1,
+      magSize: 1,
+    },
+    [WeaponType.Chainsaw]: {
+      damage: 20, // Per tick
+      fireRate: 100,
+      reloadTime: 2000,
+      range: 50,
+      projectileSpeed: 0,
+      spread: 0,
+      magSize: 100,
+    },
+    [WeaponType.Boomerang]: {
+      damage: 30,
+      fireRate: 1000,
+      reloadTime: 400,
+      range: 176 * 4, // 4 Player Heights
+      projectileSpeed: 20,
+      spread: 0,
+      magSize: 1,
+    },
+    [WeaponType.Sword]: {
+      damage: 10,
+      fireRate: 400,
+      reloadTime: 0,
+      range: 70,
+      projectileSpeed: 0,
+      spread: 0,
+      magSize: 9999, // Infinite
+    },
+    [WeaponType.Laser]: {
+      damage: 10, // Half chainsaw
+      fireRate: 50,
+      reloadTime: 2000,
+      range: 44 * 6, // 6 Player Lengths
+      projectileSpeed: 0, // Hitscan
+      spread: 0,
+      magSize: 30,
+    },
+    [WeaponType.GrenadeLauncher]: {
+      damage: 0, // Impact damage
+      fireRate: 400,
+      reloadTime: 2500,
+      range: 500,
+      projectileSpeed: 20,
+      spread: 0.2,
+      magSize: 6,
+    },
+    [WeaponType.ArcTaser]: {
+      damage: 15,
+      fireRate: 110,
+      reloadTime: 1400,
+      range: 44 * 4, // ~2 Player heights reach
+      projectileSpeed: 0, // Hitscan
+      spread: 0,
+      magSize: 20,
+    },
+    [WeaponType.Sniper]: {
+      damage: 150, // 10x Pistol (15 * 10)
+      fireRate: 800, // Slower than Pistol (400)
+      reloadTime: 1000, // Same as Pistol
+      range: 1000, // 8 Player Heights (approx 8*120=960)
+      projectileSpeed: 45, // Very Fast
+      spread: 0,
+      magSize: 8,
     },
   },
   enemies: {

@@ -1,3 +1,5 @@
+
+
 import React, { useState } from 'react';
 import { GameBalance } from '../types.ts';
 
@@ -107,13 +109,18 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({ config, onUpdate, onResume
               );
           case 'cheats':
               return (
-                  <div className="text-center">
+                  <div className="text-center max-h-[70vh] overflow-y-auto">
                       <h2 className="text-2xl font-bold text-yellow-400 mb-6 uppercase">Cheats</h2>
                       <div className="grid grid-cols-2 gap-3 mb-4">
                           <button onClick={() => toggleCheat('invincible')} className={`p-3 rounded font-bold uppercase border-2 transition-all ${isCheatActive('invincible') ? 'bg-slate-800 border-yellow-400 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-slate-700 border-slate-500 text-slate-300'}`}>Invincible</button>
                           <button onClick={() => toggleCheat('instakill')} className={`p-3 rounded font-bold uppercase border-2 transition-all ${isCheatActive('instakill') ? 'bg-slate-800 border-yellow-400 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-slate-700 border-slate-500 text-slate-300'}`}>Instakill</button>
                           <button onClick={addMagic} className={`p-3 rounded font-bold uppercase border-2 transition-all ${isWealthyActive ? 'bg-slate-800 border-yellow-400 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-slate-700 border-slate-500 text-slate-300'}`}>Wealthy</button>
                           <button onClick={() => toggleCheat('speedy')} className={`p-3 rounded font-bold uppercase border-2 transition-all ${isCheatActive('speedy') ? 'bg-slate-800 border-yellow-400 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-slate-700 border-slate-500 text-slate-300'}`}>Speedy</button>
+                          
+                          <button onClick={() => window.dispatchEvent(new CustomEvent('cheat-spawn-weapons'))} className="p-3 rounded font-bold uppercase border-2 bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600 transition-all">Weapons</button>
+                          <button onClick={() => window.dispatchEvent(new CustomEvent('cheat-spawn-gear'))} className="p-3 rounded font-bold uppercase border-2 bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600 transition-all">Gear</button>
+                          <button onClick={() => window.dispatchEvent(new CustomEvent('cheat-round-change', { detail: { amount: 5 } }))} className="p-3 rounded font-bold uppercase border-2 bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600 transition-all">Round +5</button>
+                          <button onClick={() => window.dispatchEvent(new CustomEvent('cheat-round-change', { detail: { amount: -5 } }))} className="p-3 rounded font-bold uppercase border-2 bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600 transition-all">Round -5</button>
                       </div>
                       <div className="flex flex-col gap-2">
                           <button onClick={resetCheats} className="px-6 py-2 bg-red-900/50 hover:bg-red-900 border border-red-500 text-red-200 rounded font-bold uppercase text-sm">Reset Cheats</button>

@@ -43,9 +43,9 @@ export const createInitialState = (balance: GameBalance, loadout?: Loadout): Gam
         snow.push({ x: Math.random() * w, y: Math.random() * h });
     }
 
-    // Default Configuration
-    let initialWeapon = WeaponType.Pistol;
-    let initialTier = ItemTier.Grey;
+    // Default Configuration (FNG starts with White Snowball)
+    let initialWeapon = WeaponType.Snowball;
+    let initialTier = ItemTier.White;
     let initialGear = [null, null, null, null] as (any | null)[];
     let initialHp = balance.player.maxHp;
 
@@ -67,6 +67,16 @@ export const createInitialState = (balance: GameBalance, loadout?: Loadout): Gam
 
     const playerMaxHp = initialHp;
 
+    // Initialize weapon tiers map with all weapons
+    const weaponTiers: Record<WeaponType, ItemTier> = {} as any;
+    Object.values(WeaponType).forEach(t => weaponTiers[t] = ItemTier.Grey);
+    // Explicitly set Snowball to White if it's the weapon (though defaults to Grey in list, we override)
+    weaponTiers[WeaponType.Snowball] = ItemTier.White;
+    
+    if (loadout) weaponTiers[loadout.weapon] = loadout.weaponTier;
+    // If default (no loadout), override Snowball to White
+    else weaponTiers[WeaponType.Snowball] = ItemTier.White;
+
     return {
         gamePhase: 'menu', 
         inBunker: false,
@@ -87,25 +97,17 @@ export const createInitialState = (balance: GameBalance, loadout?: Loadout): Gam
         player: {
             pos: { ...mapData.playerStart }, velocity: { x: 0, y: 0 }, hp: playerMaxHp, maxHp: playerMaxHp, coins: 0, keys: 1,
             weapon: initialWeapon,
-            weaponTiers: { 
-                [WeaponType.Pistol]: WeaponType.Pistol === initialWeapon ? initialTier : ItemTier.Grey, 
-                [WeaponType.Shotgun]: WeaponType.Shotgun === initialWeapon ? initialTier : ItemTier.Grey, 
-                [WeaponType.AR]: WeaponType.AR === initialWeapon ? initialTier : ItemTier.Grey, 
-                [WeaponType.Flamethrower]: WeaponType.Flamethrower === initialWeapon ? initialTier : ItemTier.Grey 
-            },
-            maxTiers: { 
-                [WeaponType.Pistol]: WeaponType.Pistol === initialWeapon ? initialTier : ItemTier.Grey, 
-                [WeaponType.Shotgun]: WeaponType.Shotgun === initialWeapon ? initialTier : ItemTier.Grey, 
-                [WeaponType.AR]: WeaponType.AR === initialWeapon ? initialTier : ItemTier.Grey, 
-                [WeaponType.Flamethrower]: WeaponType.Flamethrower === initialWeapon ? initialTier : ItemTier.Grey 
-            },
+            weaponTiers: weaponTiers,
+            maxTiers: { ...weaponTiers },
             inventory: [],
             equippedGear: initialGear,
             ownedWeapons: [initialWeapon], lastShotTime: 0, reloadingUntil: 0, ammo: balance.weapons[initialWeapon].magSize, angle: 0, ammoType: AmmoType.Standard, unlockedAmmo: new Set([AmmoType.Standard]),
-            reviving: false, reviveProgress: 0, invulnerableUntil: 0, lastMedkitWave: 0
+            reviving: false, reviveProgress: 0, invulnerableUntil: 0, lastMedkitWave: 0,
+            lastUnarmedTime: 0
         },
         ammoProcCooldowns: new Map(),
         enemies: [], projectiles: [], particles: [], loot: [], floatingTexts: [], turrets: [], decoys: [], worldMedkits: [], worldKeys: [], magicDrops: [], clones: [], puddles: [],
+        reinforcements: [], mines: [],
         camera: { x: 0, y: 0 }, screenShake: 0, snow: snow,
         gameTime: 0, wave: 1, waveTimer: balance.enemies.waveDuration * 1.5, nextSpawnTime: 0, depositedCoins: 0, hordeMode: { active: false, timeLeft: 0 },
         isAutoFiring: false,
@@ -144,6 +146,23 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
     const isPlaying = state.gamePhase === 'playing';
 
     if (state.loot.length < LOOT_CONFIG.SPAWNING.MAX_PRESENTS) spawnLoot(state, LOOT_CONFIG.SPAWNING.BATCH_SIZE, true);
+
+    // UNARMED LOGIC (Auto-Equip White Snowball)
+    if (isPlaying) {
+        if (!p.weapon) {
+            if (!p.lastUnarmedTime) p.lastUnarmedTime = state.gameTime;
+            // 3 Seconds Wait
+            if (state.gameTime - p.lastUnarmedTime > 3000) {
+                p.weapon = WeaponType.Snowball;
+                p.weaponTiers[WeaponType.Snowball] = ItemTier.White;
+                p.ammo = balance.weapons[WeaponType.Snowball].magSize;
+                p.lastUnarmedTime = 0;
+                addFloatingText(state, p.pos, "FOUND SNOWBALL", '#fff');
+            }
+        } else {
+            p.lastUnarmedTime = 0;
+        }
+    }
 
     // Menu / Game Over / Victory Logic (Visuals Only)
     if (state.gamePhase === 'menu' || state.gamePhase === 'intro' || state.gamePhase === 'game_over' || state.gamePhase === 'victory') {
@@ -278,8 +297,14 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
             m.velocity.x *= 0.9; m.velocity.y *= 0.9;
             
             if (distance(m.pos, p.pos) < balance.player.pickupRadius) {
-                 p.coins += m.value;
-                 addFloatingText(state, m.pos, `+${m.value} MAGIC`, m.tier === 'Rare' ? '#c084fc' : m.tier === 'Uncommon' ? '#facc15' : '#22d3ee');
+                 // Check for Elf Hat (+50% Magic)
+                 const hasHat = p.equippedGear.some(g => g?.stats?.type === 'elf_hat');
+                 const bonus = hasHat ? Math.floor(m.value * 0.5) : 0;
+                 
+                 p.coins += m.value + bonus;
+                 
+                 const text = bonus > 0 ? `+${m.value} (+${bonus})` : `+${m.value}`;
+                 addFloatingText(state, m.pos, `${text} MAGIC`, m.tier === 'Rare' ? '#c084fc' : m.tier === 'Uncommon' ? '#facc15' : '#22d3ee');
                  if (m.tier === 'Rare') addParticle(state, m.pos, '#c084fc', 'spark', 10, 3);
                  else if (m.tier === 'Uncommon') addParticle(state, m.pos, '#facc15', 'spark', 5, 2);
                  else addParticle(state, m.pos, '#22d3ee', 'spark', 3, 1);
@@ -541,6 +566,41 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                 if (distance(l.pos, p.pos) > DESPAWN_RADIUS) return false;
                 return true;
             });
+
+            // REINFORCEMENTS LOGIC: Spawn AI Allies
+            const reinforceCount = p.equippedGear.filter(g => g?.stats?.type === 'reinforce').length;
+            if (reinforceCount > 0) {
+                // Spawn allies offscreen
+                for (let r=0; r<reinforceCount * state.wave; r++) { // +1 per wave per item
+                    // Just spawn 1 per item per wave increment, accumulating? 
+                    // Prompt: "Calls a reinforcement every new wave... +1 each wave" implies cumulative or just 1 new one.
+                    // "Clone is now Reinforce. It calls a reinforcement every new wave... +1 each wave"
+                    // Let's interpret as: Spawn Wave # amount of reinforcements? No, that's too many.
+                    // Let's spawn 1 reinforcement entity per equipped item at start of wave.
+                    // AND they persist? No, "calls a reinforcement". 
+                    // Let's spawn 1 per item.
+                    
+                    const angle = Math.random() * Math.PI * 2;
+                    const spawnDist = 900;
+                    const sPos = { x: p.pos.x + Math.cos(angle)*spawnDist, y: p.pos.y + Math.sin(angle)*spawnDist };
+                    
+                    state.reinforcements.push({
+                        id: Math.random().toString(),
+                        pos: sPos,
+                        velocity: {x:0, y:0},
+                        radius: 22,
+                        rotation: 0,
+                        dead: false,
+                        hp: 200,
+                        maxHp: 200,
+                        weapon: p.weapon || WeaponType.AR, // Copy player weapon
+                        lastShotTime: 0,
+                        immuneUntil: state.gameTime + 10000, // Immune while walking in? "Briefly immune until they arrive within 4 player heights"
+                        targetOffset: { x: (Math.random()-0.5)*200, y: (Math.random()-0.5)*200 } // Patrol offset
+                    });
+                }
+                addFloatingText(state, p.pos, "REINFORCEMENTS!", '#3b82f6');
+            }
         }
         
         if (isPlaying) {
@@ -565,17 +625,88 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                         } else if (g.stats.type === 'snowman') {
                             state.decoys.push({ id: Math.random().toString(), pos: { ...p.pos }, velocity: { x: 0, y: 0 }, radius: 15, rotation: 0, dead: false, hp: 1000, maxHp: 1000 });
                             g.stats.lastProc = state.gameTime + 25000; addFloatingText(state, p.pos, "SNOWMAN DEPLOYED", '#fff');
-                        } else if (g.stats.type === 'beaker') {
-                            state.puddles.push({ id: Math.random().toString(), pos: { ...p.pos }, velocity: {x:0,y:0}, radius: 44, rotation: 0, dead: false, endTime: state.gameTime + 20000, nextTick: 0 });
+                        } else if (g.stats.type === 'mines') { // Replaces Poison/Beaker
+                            state.mines.push({ id: Math.random().toString(), pos: { ...p.pos }, velocity: {x:0,y:0}, radius: 10, rotation: 0, dead: false, triggerRadius: 30, blastRadius: 100, damage: 200, armed: false });
+                            // Arm after 1s
+                            setTimeout(() => { const m = state.mines[state.mines.length-1]; if(m) m.armed = true; }, 1000);
                             g.stats.lastProc = state.gameTime + 6000;
-                        } else if (g.stats.type === 'santa_hat') {
-                            const spawnOffset = { x: p.pos.x - 25, y: p.pos.y }; // Behind
-                            state.clones.push({ id: Math.random().toString(), pos: spawnOffset, velocity: {x:0,y:0}, radius: 22, rotation: p.angle, dead: false, hp: 100, maxHp: 100, lastShotTime: 0 });
-                            g.stats.lastProc = state.gameTime + 20000; addFloatingText(state, p.pos, "CLONE SPAWNED", '#fca5a5');
-                        } else if (g.stats.type === 'medkit') {
-                            state.worldMedkits.push({ id: Math.random().toString(), pos: { x: p.pos.x + (Math.random()-0.5)*100, y: p.pos.y + (Math.random()-0.5)*100 }, velocity: {x:0,y:0}, radius: 10, rotation: 0, dead: false });
-                            addFloatingText(state, p.pos, "MEDKIT SPAWNED", '#ef4444');
-                            g.stats.lastProc = state.gameTime + 60000; 
+                        } else if (g.stats.type === 'regen') { // Replaces Medkit
+                            if (p.hp < p.maxHp) {
+                                p.hp = Math.min(p.hp + 1, p.maxHp);
+                                // No floating text spam for 1hp/sec
+                            }
+                            g.stats.lastProc = state.gameTime + 1000; 
+                        } else if (g.stats.type === 'tesla') {
+                            // Fires Red Arc Taser every 5s
+                            handleShoot(state, balance, 'player', p.pos, p.angle); // Reuse logic? No, create specific effect.
+                            // Trigger Arc Effect manually to force weapon type
+                            const weaponStats = balance.weapons[WeaponType.ArcTaser];
+                            // Find target
+                            let closest: Enemy | null = null;
+                            let minDist = weaponStats.range;
+                            state.enemies.forEach(e => {
+                                const d = distance(p.pos, e.pos);
+                                if (d < minDist) { minDist = d; closest = e; }
+                            });
+                            
+                            if (closest) {
+                                // Visual
+                                addParticle(state, p.pos, '#f87171', 'spark', 5, 2);
+                                // Hack: Call handleShoot with modified weapon prop in balance temporarily?
+                                // Better: Just replicate simple hit logic or projectile
+                                // Simple: Instant damage to closest
+                                closest.hp -= 30;
+                                addParticle(state, closest.pos, '#f87171', 'spark', 5, 2);
+                                if (closest.hp <= 0) { closest.dead = true; p.coins += balance.enemies.types[closest.type].score; }
+                                // Draw Line (Visual handled in renderer if we add a "beam" projectile that dies instantly)
+                                state.projectiles.push({
+                                    id: Math.random().toString(), pos: p.pos, velocity: {x:0,y:0}, radius: 1, rotation: 0, dead: true, damage: 0, rangeRemaining: 0,
+                                    color: '#f87171', tier: ItemTier.Red, source: 'player', ammoType: AmmoType.Standard
+                                }); 
+                                // Actually, handleShoot logic for ArcTaser is complex. Let's just override weapon temporarily.
+                                const oldW = p.weapon;
+                                p.weapon = WeaponType.ArcTaser;
+                                p.weaponTiers[WeaponType.ArcTaser] = ItemTier.Red; // Strong
+                                handleShoot(state, balance, 'player');
+                                p.weapon = oldW; // Restore
+                            }
+                            g.stats.lastProc = state.gameTime + 5000;
+                        } else if (g.stats.type === 'sleighbells') {
+                            // Firebombs straight line every 25s
+                            // Find best line
+                            const testAngles = 16;
+                            let bestAngle = 0;
+                            let maxHits = 0;
+                            for(let i=0; i<testAngles; i++) {
+                                const a = (i / testAngles) * Math.PI * 2;
+                                let hits = 0;
+                                // Raycast check 800px
+                                for(let d=0; d<800; d+=50) {
+                                    const ck = { x: p.pos.x + Math.cos(a)*d, y: p.pos.y + Math.sin(a)*d };
+                                    state.enemies.forEach(e => {
+                                        if (distance(ck, e.pos) < e.radius + 30) hits++;
+                                    });
+                                }
+                                if (hits > maxHits) { maxHits = hits; bestAngle = a; }
+                            }
+                            
+                            // Fire 5 grenades along line
+                            for(let k=1; k<=5; k++) {
+                                const dist = k * 150;
+                                const target = { x: p.pos.x + Math.cos(bestAngle)*dist, y: p.pos.y + Math.sin(bestAngle)*dist };
+                                // Spawn Grenade Projectile targeting that spot
+                                const flightTime = dist / 20; // speed 20
+                                state.projectiles.push({
+                                    id: Math.random().toString(),
+                                    pos: { ...p.pos },
+                                    velocity: { x: Math.cos(bestAngle)*20, y: Math.sin(bestAngle)*20 },
+                                    radius: 6, rotation: 0, dead: false, damage: 0, rangeRemaining: dist,
+                                    color: '#ef4444', tier: ItemTier.Red, source: 'player', ammoType: AmmoType.Standard,
+                                    weaponType: WeaponType.GrenadeLauncher, isGrenade: true
+                                });
+                            }
+                            addFloatingText(state, p.pos, "SLEIGHBELLS!", '#fca5a5');
+                            g.stats.lastProc = state.gameTime + 25000;
                         }
                     }
                 }
@@ -591,7 +722,7 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                 normMove = state.inputs.mobile.moveVec;
             }
             
-            const hasShoes = p.equippedGear.some(g => g?.stats?.type === 'shoes');
+            const hasShoes = p.equippedGear.some(g => g?.stats?.type === 'speed_shoes');
             let speedMod = hasShoes ? 2.0 : 1.0;
             if (balance.cheats?.speedy) speedMod += 2.0;
 
@@ -613,35 +744,57 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
             
             // --- AUTO AIM & AUTO FIRE LOGIC ---
             // 1. Identify closest enemy that is alive, onscreen, and in range.
-            const weaponRange = balance.weapons[p.weapon].range;
+            const weaponRange = p.weapon ? balance.weapons[p.weapon].range : 0;
             const viewW = window.innerWidth;
             const viewH = window.innerHeight;
             const cam = state.camera;
             
-            let closestEnemy: Enemy | null = null;
+            let targetEnemy: Enemy | null = null;
             let minEnemyDist = weaponRange; // Only consider within range
 
-            for (const enemy of state.enemies) {
-                if (enemy.dead) continue;
-                
-                // Screen bounds check (with 100px padding)
-                if (enemy.pos.x < cam.x - 100 || enemy.pos.x > cam.x + viewW + 100 || 
-                    enemy.pos.y < cam.y - 100 || enemy.pos.y > cam.y + viewH + 100) continue;
+            if (p.weapon) { // Only aim if has weapon
+                if (p.weapon === WeaponType.Sniper) {
+                    // SNIPER LOGIC: Highest HP in Range
+                    let maxHp = -1;
+                    for (const enemy of state.enemies) {
+                        if (enemy.dead) continue;
+                        
+                        // Screen bounds check
+                        if (enemy.pos.x < cam.x - 100 || enemy.pos.x > cam.x + viewW + 100 || 
+                            enemy.pos.y < cam.y - 100 || enemy.pos.y > cam.y + viewH + 100) continue;
 
-                const d = distance(p.pos, enemy.pos);
-                if (d <= minEnemyDist) {
-                    minEnemyDist = d;
-                    closestEnemy = enemy;
+                        const d = distance(p.pos, enemy.pos);
+                        if (d <= weaponRange) {
+                            if (enemy.hp > maxHp) {
+                                maxHp = enemy.hp;
+                                targetEnemy = enemy;
+                            }
+                        }
+                    }
+                } else {
+                    // STANDARD LOGIC: Closest in Range
+                    for (const enemy of state.enemies) {
+                        if (enemy.dead) continue;
+                        
+                        // Screen bounds check
+                        if (enemy.pos.x < cam.x - 100 || enemy.pos.x > cam.x + viewW + 100 || 
+                            enemy.pos.y < cam.y - 100 || enemy.pos.y > cam.y + viewH + 100) continue;
+
+                        const d = distance(p.pos, enemy.pos);
+                        if (d <= minEnemyDist) {
+                            minEnemyDist = d;
+                            targetEnemy = enemy;
+                        }
+                    }
                 }
             }
 
-            if (closestEnemy) {
+            if (targetEnemy) {
                 // Auto Face Enemy
-                const targetAngle = Math.atan2(closestEnemy.pos.y - p.pos.y, closestEnemy.pos.x - p.pos.x);
+                const targetAngle = Math.atan2(targetEnemy.pos.y - p.pos.y, targetEnemy.pos.x - p.pos.x);
                 p.angle = rotateTowards(p.angle, targetAngle, rotationSpeed);
                 // Auto Fire
                 handleShoot(state, balance);
-                state.clones.forEach(c => handleShoot(state, balance, 'clone', c.pos, c.rotation));
                 state.isAutoFiring = true;
             } else {
                 // No enemy? Auto Face Movement Direction
@@ -656,6 +809,49 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         // Enemy Updates (Spawn/Move/Attack)
         updateEnemies(state, balance, dt, tick);
 
+        // Reinforcement AI
+        state.reinforcements.forEach(r => {
+            if (r.dead) return;
+            // 1. Move to target offset from player
+            const targetPos = { x: p.pos.x + r.targetOffset.x, y: p.pos.y + r.targetOffset.y };
+            
+            // Check immunity
+            if (state.gameTime < r.immuneUntil) {
+                if (distance(r.pos, p.pos) < 176) r.immuneUntil = 0; // Remove immunity if close
+            }
+
+            const dist = distance(r.pos, targetPos);
+            if (dist > 20) {
+                const dir = normalize({ x: targetPos.x - r.pos.x, y: targetPos.y - r.pos.y });
+                r.pos.x += dir.x * balance.player.speed * SPEED_SCALE * tick;
+                r.pos.y += dir.y * balance.player.speed * SPEED_SCALE * tick;
+            }
+
+            // 2. Shoot
+            if (isPlaying && state.gameTime > r.lastShotTime + 500) { // Slower fire rate
+                let closest: Enemy | null = null;
+                let minDist = 600;
+                state.enemies.forEach(e => {
+                    const d = distance(r.pos, e.pos);
+                    if (d < minDist && !e.dead) { minDist = d; closest = e; }
+                });
+
+                if (closest) {
+                    const angle = Math.atan2(closest.pos.y - r.pos.y, closest.pos.x - r.pos.x);
+                    r.rotation = angle;
+                    // Mock shoot function
+                    const muzzle = { x: r.pos.x + Math.cos(angle)*20, y: r.pos.y + Math.sin(angle)*20 };
+                    state.projectiles.push({
+                        id: Math.random().toString(), pos: muzzle, velocity: { x: Math.cos(angle)*20, y: Math.sin(angle)*20 },
+                        radius: 4, rotation: angle, dead: false, damage: 15, rangeRemaining: 600, color: '#60a5fa', tier: ItemTier.Grey,
+                        source: 'reinforcement', ammoType: AmmoType.Standard, weaponType: r.weapon
+                    });
+                    r.lastShotTime = state.gameTime;
+                }
+            }
+        });
+        state.reinforcements = state.reinforcements.filter(r => r.hp > 0);
+
         state.turrets.forEach(turret => {
             turret.rotation += (Math.PI * 2 / 3000) * dt; 
             if (turret.rotation > Math.PI * 2) turret.rotation -= Math.PI * 2;
@@ -665,6 +861,36 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                 const muzzlePos = { x: turret.pos.x + Math.cos(angle) * 20, y: turret.pos.y + Math.sin(angle) * 20 };
                 state.projectiles.push({ id: Math.random().toString(), pos: muzzlePos, velocity: { x: Math.cos(angle) * balance.turret.projectileSpeed, y: Math.sin(angle) * balance.turret.projectileSpeed }, radius: 4, rotation: angle, dead: false, damage: balance.turret.damage, rangeRemaining: balance.turret.range, color: '#60a5fa', tier: ItemTier.Blue, source: 'turret', ammoType: AmmoType.Standard, weaponType: WeaponType.Flamethrower });
             }
+        });
+
+        // Mines Logic
+        state.mines = state.mines.filter(m => {
+            if (m.dead) return false;
+            if (!m.armed) return true;
+            
+            // Check collision
+            let triggered = false;
+            for (const e of state.enemies) {
+                if (distance(m.pos, e.pos) < m.triggerRadius + e.radius) {
+                    triggered = true;
+                    break;
+                }
+            }
+            
+            if (triggered) {
+                // Explode
+                addParticle(state, m.pos, '#ffffff', 'explosion', 1, 1);
+                addParticle(state, m.pos, '#ef4444', 'smoke', 8, 4);
+                state.screenShake += 5;
+                state.enemies.forEach(e => {
+                    if (distance(e.pos, m.pos) < m.blastRadius + e.radius) {
+                        e.hp -= m.damage;
+                        if (e.hp <= 0) { e.dead = true; p.coins += balance.enemies.types[e.type].score; }
+                    }
+                });
+                return false;
+            }
+            return true;
         });
 
         state.decoys = state.decoys.filter(d => {
@@ -721,8 +947,13 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
             m.velocity.x *= 0.9; m.velocity.y *= 0.9;
             
             if (distance(m.pos, p.pos) < balance.player.pickupRadius) {
-                 p.coins += m.value;
-                 addFloatingText(state, m.pos, `+${m.value} MAGIC`, m.tier === 'Rare' ? '#c084fc' : m.tier === 'Uncommon' ? '#facc15' : '#22d3ee');
+                 // Check for Elf Hat (+50% Magic)
+                 const hasHat = p.equippedGear.some(g => g?.stats?.type === 'elf_hat');
+                 const bonus = hasHat ? Math.floor(m.value * 0.5) : 0;
+                 p.coins += m.value + bonus;
+                 
+                 const text = bonus > 0 ? `+${m.value} (+${bonus})` : `+${m.value}`;
+                 addFloatingText(state, m.pos, `${text} MAGIC`, m.tier === 'Rare' ? '#c084fc' : m.tier === 'Uncommon' ? '#facc15' : '#22d3ee');
                  if (m.tier === 'Rare') addParticle(state, m.pos, '#c084fc', 'spark', 10, 3);
                  else if (m.tier === 'Uncommon') addParticle(state, m.pos, '#facc15', 'spark', 5, 2);
                  else addParticle(state, m.pos, '#22d3ee', 'spark', 3, 1);
@@ -733,52 +964,105 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
 
         for (let i = state.projectiles.length - 1; i >= 0; i--) {
             const proj = state.projectiles[i];
-            proj.pos.x += proj.velocity.x * tick; 
-            proj.pos.y += proj.velocity.y * tick; 
-            proj.rangeRemaining -= Math.hypot(proj.velocity.x * tick, proj.velocity.y * tick);
-            if (proj.rangeRemaining <= 0 || proj.pos.x < 0 || proj.pos.x > MAP_SIZE || proj.pos.y < 0 || proj.pos.y > MAP_SIZE) { proj.dead = true; continue; }
 
-            if (proj.source === 'player' || proj.source === 'turret' || proj.source === 'clone') {
+            // SPECIAL LOGIC: BOOMERANG
+            if (proj.boomerang) {
+                 const b = proj.boomerang;
+                 if (!b.returning) {
+                     // Heading out
+                     proj.pos.x += proj.velocity.x * tick;
+                     proj.pos.y += proj.velocity.y * tick;
+                     
+                     // Check if reached destination or range exhausted
+                     const dTraveled = distance(proj.pos, b.origin);
+                     if (dTraveled >= b.distTotal) {
+                         b.returning = true;
+                     }
+                 } else {
+                     // Heading back to player
+                     const dirToPlayer = normalize({ x: p.pos.x - proj.pos.x, y: p.pos.y - proj.pos.y });
+                     const returnSpeed = Math.hypot(proj.velocity.x, proj.velocity.y) * 1.5; // Return faster
+                     proj.velocity = { x: dirToPlayer.x * returnSpeed, y: dirToPlayer.y * returnSpeed };
+                     proj.pos.x += proj.velocity.x * tick;
+                     proj.pos.y += proj.velocity.y * tick;
+                     
+                     if (distance(proj.pos, p.pos) < 20) {
+                         proj.dead = true;
+                         // Catch it - replenish ammo immediately
+                         if (p.weapon === WeaponType.Boomerang) p.ammo = 1; 
+                     }
+                 }
+                 // Boomerangs spin
+                 proj.rotation += 0.3 * tick;
+            } else {
+                // STANDARD MOVEMENT
+                proj.pos.x += proj.velocity.x * tick; 
+                proj.pos.y += proj.velocity.y * tick; 
+                proj.rangeRemaining -= Math.hypot(proj.velocity.x * tick, proj.velocity.y * tick);
+            }
+            
+            // Death conditions
+            if (!proj.boomerang && (proj.rangeRemaining <= 0 || proj.pos.x < 0 || proj.pos.x > MAP_SIZE || proj.pos.y < 0 || proj.pos.y > MAP_SIZE)) { 
+                proj.dead = true; 
+                
+                // GRENADE EXPLOSION
+                if (proj.isGrenade) {
+                     addParticle(state, proj.pos, '#ffffff', 'explosion', 1, 1);
+                     addParticle(state, proj.pos, '#f59e0b', 'smoke', 8, 4);
+                     state.screenShake += 10;
+                     
+                     // Area Damage
+                     const explosionRadius = 60; 
+                     state.enemies.forEach(e => {
+                         if (distance(e.pos, proj.pos) < explosionRadius + e.radius) {
+                             e.hp -= 50; // Flat explosion damage
+                             addParticle(state, e.pos, '#ff0000', 'blood', 5, 2);
+                             if (e.hp <= 0) {
+                                e.dead = true; 
+                                p.coins += balance.enemies.types[e.type].score; 
+                             }
+                         }
+                     });
+                }
+                continue; 
+            }
+
+            // GRENADES DONT HIT ENEMIES DIRECTLY
+            if (proj.isGrenade) continue;
+
+            if (proj.source === 'player' || proj.source === 'turret' || proj.source === 'clone' || proj.source === 'reinforcement') {
                 for (const enemy of state.enemies) {
+                    // Boomerangs pass through (don't die)
                     if (!enemy.dead && distance(proj.pos, enemy.pos) < enemy.radius + proj.radius + 5) {
-                        enemy.hp -= proj.damage; proj.dead = true; addParticle(state, proj.pos, '#ff0000', 'blood', 3, 1, 5.0); 
-                        if (enemy.type !== EnemyType.Boss) { const knockDir = normalize(proj.velocity); enemy.pos.x += knockDir.x * 5; enemy.pos.y += knockDir.y * 5; }
+                        
+                        // If standard projectile, kill it. If boomerang, keep going.
+                        if (!proj.boomerang) proj.dead = true;
+                        
+                        enemy.hp -= proj.damage; 
+                        addParticle(state, proj.pos, '#ff0000', 'blood', 3, 1, 5.0); 
+                        
+                        if (enemy.type !== EnemyType.Boss && !proj.boomerang) { 
+                             const knockDir = normalize(proj.velocity); 
+                             enemy.pos.x += knockDir.x * 5; 
+                             enemy.pos.y += knockDir.y * 5; 
+                        }
+                        
                         if (enemy.hp <= 0) { 
                             enemy.dead = true; 
                             p.coins += balance.enemies.types[enemy.type].score; 
-                            addFloatingText(state, enemy.pos, `+${balance.enemies.types[enemy.type].score} ✨`, '#fcd34d'); 
-                            addParticle(state, enemy.pos, '#ff0000', 'blood', 10, 2, 5.0); 
-
-                            if (Math.random() < 0.02) {
-                                state.worldKeys.push({
-                                    id: Math.random().toString(),
-                                    pos: { ...enemy.pos },
-                                    velocity: {x:0, y:0},
-                                    radius: 15,
-                                    rotation: 0,
-                                    dead: false
-                                });
-                            }
-                            if (Math.random() < 0.02) {
-                                state.worldMedkits.push({ id: Math.random().toString(), pos: { ...enemy.pos }, velocity: {x:0, y:0}, radius: 10, rotation: 0, dead: false });
-                            }
+                            // ... Loot drops logic (keys, medkits, magic) ...
+                            if (Math.random() < 0.02) state.worldKeys.push({ id: Math.random().toString(), pos: { ...enemy.pos }, velocity: {x:0, y:0}, radius: 15, rotation: 0, dead: false });
+                            if (Math.random() < 0.02) state.worldMedkits.push({ id: Math.random().toString(), pos: { ...enemy.pos }, velocity: {x:0, y:0}, radius: 10, rotation: 0, dead: false });
                             if (Math.random() < 0.02) {
                                 const r = Math.random();
                                 let val = 20; let tier = 'Common' as any;
                                 if (r < 0.15) { val = 200; tier = 'Rare'; }
                                 else if (r < 0.50) { val = 50; tier = 'Uncommon'; }
-                                
                                 const ang = Math.random() * Math.PI * 2;
-                                state.magicDrops.push({
-                                    id: Math.random().toString(),
-                                    pos: { ...enemy.pos },
-                                    velocity: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
-                                    radius: 10, rotation: 0, dead: false,
-                                    value: val, tier: tier
-                                });
+                                state.magicDrops.push({ id: Math.random().toString(), pos: { ...enemy.pos }, velocity: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 }, radius: 10, rotation: 0, dead: false, value: val, tier: tier });
                             }
                         }
-                        break;
+                        if (!proj.boomerang) break;
                     }
                 }
             } else if (proj.source === 'enemy') {
@@ -790,14 +1074,12 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
                     proj.dead = true; 
                 }
 
-                state.decoys.forEach(d => {
-                    if (distance(proj.pos, d.pos) < d.radius + proj.radius) {
-                        proj.dead = true; d.hp -= proj.damage;
-                    }
-                });
-                state.clones.forEach(c => {
-                    if (distance(proj.pos, c.pos) < c.radius + proj.radius) {
-                        proj.dead = true; c.hp -= proj.damage;
+                state.decoys.forEach(d => { if (distance(proj.pos, d.pos) < d.radius + proj.radius) { proj.dead = true; d.hp -= proj.damage; } });
+                state.reinforcements.forEach(r => { 
+                    // Reinforcement hit
+                    if (state.gameTime > r.immuneUntil && distance(proj.pos, r.pos) < r.radius + proj.radius) {
+                        proj.dead = true; r.hp -= proj.damage;
+                        addParticle(state, r.pos, '#3b82f6', 'blood', 2, 1);
                     }
                 });
             }
@@ -813,21 +1095,10 @@ export const updateGame = (state: GameState, balance: GameBalance, dt: number) =
         else { state.gamePhase = 'game_over'; }
     }
 
-    // Global Cleanup & Updates (Particles, Floating Text, Dead Loot) - MOVED OUTSIDE BUNK CHECK
+    // Global Cleanup & Updates
     state.loot = state.loot.filter(l => !l.dead);
-
-    state.particles.forEach(p => {
-        p.pos.x += p.velocity.x * tick;
-        p.pos.y += p.velocity.y * tick;
-        p.life -= (dt / 1000);
-        if (p.life <= 0) p.dead = true;
-    });
+    state.particles.forEach(p => { p.pos.x += p.velocity.x * tick; p.pos.y += p.velocity.y * tick; p.life -= (dt / 1000); if (p.life <= 0) p.dead = true; });
     state.particles = state.particles.filter(p => !p.dead);
-
-    state.floatingTexts.forEach(t => {
-        t.pos.x += t.velocity.x * tick;
-        t.pos.y += t.velocity.y * tick;
-        t.life -= (dt / 1000);
-    });
+    state.floatingTexts.forEach(t => { t.pos.x += t.velocity.x * tick; t.pos.y += t.velocity.y * tick; t.life -= (dt / 1000); });
     state.floatingTexts = state.floatingTexts.filter(t => t.life > 0);
 };

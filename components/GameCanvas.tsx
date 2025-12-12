@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } f
 import { GameBalance, GameState, ItemTier, WeaponType, InventoryItem, HUDState } from '../types.ts';
 import { createInitialState, updateGame } from '../systems/GameLoop.ts';
 import { drawGame, createCamoPattern, createWoodPattern } from '../systems/GameRenderer.ts';
-import { BUNKER_ZONES, POI_LOCATIONS } from '../constants.ts';
+import { BUNKER_ZONES, POI_LOCATIONS, GEAR_DROPS } from '../constants.ts';
 import { distance, normalize } from '../utils/math.ts';
 import { handleInteraction, calculateInteractionFlags, recalculatePlayerStats } from '../systems/InteractionSystem.ts';
 import { addFloatingText } from '../systems/ParticleSystem.ts';
@@ -84,16 +84,41 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
               addFloatingText(s, s.bunkerPlayerPos, `+$${item.value}`, '#fbbf24');
           }
       };
+
+      const handleSellEquipped = () => {
+          const s = gameStateRef.current;
+          const p = s.player;
+          const w = p.weapon;
+          if (!w) return;
+
+          let value = 0;
+          const tier = p.weaponTiers[w];
+          
+          if (w === WeaponType.Snowball && tier === ItemTier.White) {
+              value = 1;
+          } else {
+              value = Math.floor(balance.economy.baseWeaponCost * (1 + tier));
+          }
+          
+          p.coins += value;
+          p.weapon = null;
+          p.lastUnarmedTime = s.gameTime;
+          addFloatingText(s, s.bunkerPlayerPos, `+$${value}`, '#fbbf24');
+      };
       
       const handleUpgradeWeapon = () => {
           const s = gameStateRef.current;
           const p = s.player;
+          
+          if (!p.weapon) return;
+
           const currentTier = p.weaponTiers[p.weapon];
           
           if (currentTier >= ItemTier.Red) return;
           
           let cost = 0;
-          if (currentTier === ItemTier.Grey) cost = 100;
+          if (currentTier === ItemTier.White) cost = 50; // Snowball Upgrade
+          else if (currentTier === ItemTier.Grey) cost = 100;
           else if (currentTier === ItemTier.Green) cost = 500;
           else if (currentTier === ItemTier.Blue) cost = 2500;
           
@@ -115,6 +140,126 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
           }
       };
 
+      // --- CHEAT HANDLERS ---
+      const handleCheatSpawnWeapons = () => {
+        const s = gameStateRef.current;
+        const p = s.player;
+        const weapons = Object.values(WeaponType);
+        
+        // Sort Weapons by Base Rarity: White, Grey, Green, Blue, Red
+        const getBaseTier = (w: WeaponType) => {
+            if (w === WeaponType.Snowball) return ItemTier.White;
+            if (w === WeaponType.Pistol || w === WeaponType.Shotgun || w === WeaponType.Sword) return ItemTier.Grey;
+            if (w === WeaponType.AR || w === WeaponType.Boomerang || w === WeaponType.Chainsaw) return ItemTier.Green;
+            if (w === WeaponType.GrenadeLauncher || w === WeaponType.Sniper) return ItemTier.Blue;
+            return ItemTier.Red;
+        };
+
+        weapons.sort((a, b) => getBaseTier(a) - getBaseTier(b));
+
+        const count = weapons.length;
+        const cols = Math.ceil(Math.sqrt(count));
+        const spacing = 60;
+        
+        // Left side center relative to player
+        const originX = p.pos.x - 200;
+        const originY = p.pos.y;
+        
+        const gridWidth = (cols - 1) * spacing;
+        const rows = Math.ceil(count / cols);
+        const gridHeight = (rows - 1) * spacing;
+        
+        const startX = originX - gridWidth / 2;
+        const startY = originY - gridHeight / 2;
+
+        weapons.forEach((w, i) => {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const tier = getBaseTier(w);
+            const color = tier === ItemTier.White ? '#fff' : tier === ItemTier.Grey ? '#94a3b8' : tier === ItemTier.Green ? '#4ade80' : tier === ItemTier.Blue ? '#60a5fa' : '#f87171';
+
+            s.loot.push({
+                id: Math.random().toString(),
+                pos: { x: startX + col * spacing, y: startY + row * spacing },
+                velocity: { x: 0, y: 0 },
+                radius: 15,
+                rotation: 0,
+                dead: false,
+                type: 'weapon_drop',
+                pickupProgress: 0,
+                weaponType: w,
+                tier: tier,
+                color: color,
+                label: `${ItemTier[tier]} ${w}`
+            });
+        });
+        addFloatingText(s, p.pos, "WEAPONS SPAWNED", '#fbbf24');
+      };
+
+      const handleCheatSpawnGear = () => {
+        const s = gameStateRef.current;
+        const p = s.player;
+        
+        // Sorted strictly by tier as requested: Grey -> Green -> Blue -> Red
+        const items = [...GEAR_DROPS].sort((a, b) => (a.tier || 0) - (b.tier || 0));
+        
+        const count = items.length;
+        const cols = Math.ceil(Math.sqrt(count));
+        const spacing = 60;
+
+        // Right side center relative to player
+        const originX = p.pos.x + 200;
+        const originY = p.pos.y;
+        
+        const gridWidth = (cols - 1) * spacing;
+        const rows = Math.ceil(count / cols);
+        const gridHeight = (rows - 1) * spacing;
+        
+        const startX = originX - gridWidth / 2;
+        const startY = originY - gridHeight / 2;
+
+        items.forEach((item, i) => {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const pos = { x: startX + col * spacing, y: startY + row * spacing };
+
+            const tier = item.tier;
+            let color = '#94a3b8';
+            if (tier === ItemTier.Green) color = '#4ade80';
+            else if (tier === ItemTier.Blue) color = '#60a5fa';
+            else if (tier === ItemTier.Red) color = '#f87171';
+
+            s.loot.push({
+                id: Math.random().toString(),
+                pos: pos,
+                velocity: {x:0, y:0},
+                radius: 15,
+                rotation: 0,
+                dead: false,
+                type: 'item_drop',
+                pickupProgress: 0,
+                contents: {
+                    type: 'gear',
+                    tier: tier,
+                    stats: item.stats,
+                    label: item.label
+                } as any,
+                label: item.label
+            });
+        });
+        addFloatingText(s, p.pos, "GEAR SPAWNED", '#fbbf24');
+      };
+
+      const handleCheatRoundChange = (e: CustomEvent) => {
+        const { amount } = e.detail;
+        const s = gameStateRef.current;
+        s.wave = Math.max(1, s.wave + amount);
+        s.waveTimer = balance.enemies.waveDuration * 1.5;
+        // Reset spawn time slightly to prevent immediate spam
+        s.nextSpawnTime = s.gameTime + 2000;
+        addFloatingText(s, s.player.pos, `WAVE ${s.wave}`, '#fbbf24');
+      };
+
       window.addEventListener('ui-interaction-start', handleUiStart);
       window.addEventListener('ui-interaction-end', handleUiEnd);
       window.addEventListener('restart-game', handleRestart as EventListener);
@@ -129,9 +274,14 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
       }) as EventListener);
       
       window.addEventListener('sell-item', handleSellItem as EventListener);
+      window.addEventListener('sell-equipped-weapon', handleSellEquipped as EventListener);
       window.addEventListener('upgrade-weapon', handleUpgradeWeapon);
       window.addEventListener('mobile-action', handleMobileAction as EventListener);
       
+      window.addEventListener('cheat-spawn-weapons', handleCheatSpawnWeapons);
+      window.addEventListener('cheat-spawn-gear', handleCheatSpawnGear);
+      window.addEventListener('cheat-round-change', handleCheatRoundChange as EventListener);
+
       return () => {
           window.removeEventListener('ui-interaction-start', handleUiStart);
           window.removeEventListener('ui-interaction-end', handleUiEnd);
@@ -139,8 +289,13 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
           window.removeEventListener('start-game', (() => {}) as EventListener);
           window.removeEventListener('return-to-menu', (() => {}) as EventListener);
           window.removeEventListener('sell-item', handleSellItem as EventListener);
+          window.removeEventListener('sell-equipped-weapon', handleSellEquipped as EventListener);
           window.removeEventListener('upgrade-weapon', handleUpgradeWeapon);
           window.removeEventListener('mobile-action', handleMobileAction as EventListener);
+          
+          window.removeEventListener('cheat-spawn-weapons', handleCheatSpawnWeapons);
+          window.removeEventListener('cheat-spawn-gear', handleCheatSpawnGear);
+          window.removeEventListener('cheat-round-change', handleCheatRoundChange as EventListener);
       };
   }, [balance]);
 
@@ -304,23 +459,31 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
           const item = p.inventory[index];
           if (item && item.type === 'weapon' && item.weaponType) {
               const currentWeapon = p.weapon;
-              const currentTier = p.weaponTiers[p.weapon];
-              
-              // Swap
-              p.weapon = item.weaponType;
-              p.weaponTiers[p.weapon] = item.tier || ItemTier.Grey;
-              p.maxTiers[p.weapon] = Math.max(p.maxTiers[p.weapon], item.tier || ItemTier.Grey);
-              p.ammo = balance.weapons[p.weapon].magSize;
+              // If currently unarmed, just equip
+              if (!currentWeapon) {
+                  p.weapon = item.weaponType;
+                  p.weaponTiers[p.weapon] = item.tier || ItemTier.Grey;
+                  p.maxTiers[p.weapon] = Math.max(p.maxTiers[p.weapon], item.tier || ItemTier.Grey);
+                  p.ammo = balance.weapons[p.weapon].magSize;
+                  p.inventory.splice(index, 1);
+              } else {
+                  // Swap
+                  const currentTier = p.weaponTiers[currentWeapon];
+                  p.weapon = item.weaponType;
+                  p.weaponTiers[p.weapon] = item.tier || ItemTier.Grey;
+                  p.maxTiers[p.weapon] = Math.max(p.maxTiers[p.weapon], item.tier || ItemTier.Grey);
+                  p.ammo = balance.weapons[p.weapon].magSize;
 
-              // Put old into inventory
-              p.inventory[index] = {
-                  id: Math.random().toString(),
-                  type: 'weapon',
-                  weaponType: currentWeapon,
-                  tier: currentTier,
-                  value: Math.floor(balance.economy.baseWeaponCost * (1 + currentTier)),
-                  label: `${ItemTier[currentTier]} ${currentWeapon}`
-              };
+                  // Put old into inventory
+                  p.inventory[index] = {
+                      id: Math.random().toString(),
+                      type: 'weapon',
+                      weaponType: currentWeapon,
+                      tier: currentTier,
+                      value: Math.floor(balance.economy.baseWeaponCost * (1 + currentTier)),
+                      label: `${ItemTier[currentTier]} ${currentWeapon}`
+                  };
+              }
           }
       };
 
@@ -379,17 +542,17 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                 if (itemToDrop) p.equippedGear[index] = null;
             } else if (location === 'equipped') {
                 const w = p.weapon;
+                if (!w) return; // No weapon to drop
+
                 const t = p.weaponTiers[w];
-                if (w === WeaponType.Pistol && t === ItemTier.Grey) return; // Can't drop starting pistol
                 
                 itemToDrop = { 
                     id: Math.random().toString(), type: 'weapon', weaponType: w, tier: t, value: 0, label: `${ItemTier[t]} ${w}` 
                 };
                 
-                // Reset to default pistol
-                p.weapon = WeaponType.Pistol;
-                p.weaponTiers[WeaponType.Pistol] = ItemTier.Grey;
-                p.ammo = balance.weapons[WeaponType.Pistol].magSize;
+                // Become unarmed
+                p.weapon = null;
+                p.lastUnarmedTime = s.gameTime;
             }
 
             if (itemToDrop) {
@@ -413,7 +576,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                 }
 
                 const tier = itemToDrop.tier || ItemTier.Grey;
-                const color = tier === ItemTier.Red ? '#f87171' : tier === ItemTier.Blue ? '#60a5fa' : tier === ItemTier.Green ? '#4ade80' : '#94a3b8';
+                const color = tier === ItemTier.White ? '#fff' : tier === ItemTier.Red ? '#f87171' : tier === ItemTier.Blue ? '#60a5fa' : tier === ItemTier.Green ? '#4ade80' : '#94a3b8';
 
                 if (itemToDrop.type === 'weapon') {
                     s.loot.push({
@@ -500,7 +663,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                        hp: s.player.hp,
                        maxHp: s.player.maxHp,
                        ammo: s.player.ammo,
-                       maxAmmo: balance.weapons[s.player.weapon].magSize,
+                       maxAmmo: s.player.weapon ? balance.weapons[s.player.weapon].magSize : 0,
                        coins: s.player.coins,
                        keys: s.player.keys,
                        inventory: s.player.inventory,
@@ -516,7 +679,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
                        showGunsmith: flags.showGunsmith,
                        showMedic: flags.showMedic,
                        weapon: s.player.weapon,
-                       weaponTier: s.player.weaponTiers[s.player.weapon],
+                       weaponTier: s.player.weapon ? s.player.weaponTiers[s.player.weapon] : ItemTier.Grey,
                        weaponTiers: s.player.weaponTiers,
                        maxTiers: s.player.maxTiers,
                        ownedWeapons: s.player.ownedWeapons,

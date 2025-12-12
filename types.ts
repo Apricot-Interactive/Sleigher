@@ -4,7 +4,15 @@ export enum WeaponType {
   Pistol = 'Pistol',
   Shotgun = 'Shotgun',
   AR = 'AR',
-  Flamethrower = 'Flamethrower'
+  Flamethrower = 'Flamethrower',
+  Snowball = 'Snowball',
+  Chainsaw = 'Chainsaw',
+  Boomerang = 'Boomerang',
+  Sword = 'Sword',
+  Laser = 'Laser',
+  GrenadeLauncher = 'GrenadeLauncher',
+  ArcTaser = 'ArcTaser',
+  Sniper = 'Sniper'
 }
 
 export enum EnemyType {
@@ -15,6 +23,7 @@ export enum EnemyType {
 }
 
 export enum ItemTier {
+  White = -1,
   Grey = 0,
   Green = 1,
   Blue = 2,
@@ -124,7 +133,7 @@ export interface Particle extends Entity {
   maxLife: number;
   color: string;
   size: number;
-  type: 'blood' | 'snow' | 'fire' | 'smoke' | 'spark' | 'casing' | 'heart';
+  type: 'blood' | 'snow' | 'fire' | 'smoke' | 'spark' | 'casing' | 'heart' | 'explosion';
 }
 
 export interface Projectile extends Entity {
@@ -132,9 +141,17 @@ export interface Projectile extends Entity {
   color: string;
   rangeRemaining: number;
   tier: ItemTier;
-  source: 'player' | 'enemy' | 'turret' | 'clone';
+  source: 'player' | 'enemy' | 'turret' | 'clone' | 'reinforcement';
   ammoType: AmmoType;
   weaponType?: WeaponType;
+  // Special weapon props
+  boomerang?: {
+      returning: boolean;
+      origin: Vector2;
+      target: Vector2;
+      distTotal: number;
+  };
+  isGrenade?: boolean;
 }
 
 export interface PoisonDot {
@@ -157,12 +174,13 @@ export interface Enemy extends Entity {
   lastBlueSummon?: number;
 }
 
-export type GearType = 'shield' | 'pen' | 'turret' | 'snowman' | 'medkit' | 'shoes' | 'lightning' | 'beaker' | 'santa_hat';
+// Updated Gear Types
+export type GearType = 'vest' | 'speed_shoes' | 'mines' | 'snowman' | 'elf_hat' | 'turret' | 'regen' | 'lightning' | 'tesla' | 'pen' | 'sleighbells' | 'reinforce';
 
 export interface GearStats {
     type: GearType;
     hpBonus?: number;
-    lastProc?: number; // For cooldowns (Turret/Snowman drop)
+    lastProc?: number; // For cooldowns
 }
 
 export interface Turret extends Entity {
@@ -178,6 +196,22 @@ export interface Clone extends Entity {
     hp: number;
     maxHp: number;
     lastShotTime: number;
+}
+
+export interface Reinforcement extends Entity {
+    hp: number;
+    maxHp: number;
+    weapon: WeaponType;
+    lastShotTime: number;
+    immuneUntil: number; // Immunity while walking in
+    targetOffset: Vector2; // Where relative to player it wants to stand
+}
+
+export interface Mine extends Entity {
+    triggerRadius: number;
+    blastRadius: number;
+    damage: number;
+    armed: boolean;
 }
 
 export interface WorldMedkit extends Entity {
@@ -253,7 +287,7 @@ export interface PlayerState {
     maxHp: number;
     coins: number;
     keys: number;
-    weapon: WeaponType;
+    weapon: WeaponType | null; // Nullable for unarmed state
     weaponTiers: Record<WeaponType, ItemTier>;
     maxTiers: Record<WeaponType, ItemTier>;
     inventory: InventoryItem[];
@@ -269,6 +303,7 @@ export interface PlayerState {
     reviveProgress: number;
     invulnerableUntil: number;
     lastMedkitWave: number;
+    lastUnarmedTime: number; // Timestamp when weapon was unequipped
 }
 
 export interface GameState {
@@ -305,6 +340,8 @@ export interface GameState {
     magicDrops: MagicDrop[];
     clones: Clone[];
     puddles: Puddle[];
+    reinforcements: Reinforcement[];
+    mines: Mine[];
     
     camera: Vector2;
     screenShake: number;
@@ -370,7 +407,7 @@ export interface HUDState {
     showGunsmith: boolean;
     showMedic: boolean;
 
-    weapon: WeaponType;
+    weapon: WeaponType | null;
     weaponTier: ItemTier;
     weaponTiers: Record<WeaponType, ItemTier>;
     maxTiers: Record<WeaponType, ItemTier>;

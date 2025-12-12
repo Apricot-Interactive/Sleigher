@@ -88,6 +88,28 @@ const drawWeaponIcon = (ctx: CanvasRenderingContext2D, type: WeaponType, x: numb
         ctx.rect(20, 35, 60, 30); ctx.fill(); // Tank
         ctx.beginPath(); ctx.rect(80, 45, 15, 10); ctx.fill(); // Nozzle
         ctx.beginPath(); ctx.moveTo(20, 45); ctx.lineTo(5, 45); ctx.lineTo(5, 65); ctx.lineTo(20, 55); ctx.fill(); // Handle
+    } else if (type === WeaponType.Snowball) {
+        ctx.arc(50, 50, 30, 0, Math.PI*2); ctx.fill();
+    } else if (type === WeaponType.Chainsaw) {
+        ctx.moveTo(10,40); ctx.lineTo(40,40); ctx.lineTo(40,30); ctx.lineTo(90,30); ctx.lineTo(95,40); ctx.lineTo(90,50); ctx.lineTo(40,50); ctx.lineTo(40,60); ctx.lineTo(10,60); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(25,50,5,0,Math.PI*2); ctx.fill();
+    } else if (type === WeaponType.Boomerang) {
+        ctx.translate(50,50); ctx.rotate(-Math.PI/4); ctx.translate(-50,-50);
+        ctx.moveTo(10,50); ctx.quadraticCurveTo(50,0,90,50); ctx.lineTo(80,60); ctx.quadraticCurveTo(50,20,20,60); ctx.fill();
+    } else if (type === WeaponType.Sword) {
+        ctx.moveTo(20,80); ctx.lineTo(35,65); ctx.lineTo(85,15); ctx.lineTo(90,20); ctx.lineTo(40,70); ctx.lineTo(25,85); ctx.fill();
+    } else if (type === WeaponType.Laser) {
+        ctx.rect(20,40,40,20); ctx.rect(60,45,30,10); ctx.fill();
+    } else if (type === WeaponType.GrenadeLauncher) {
+        ctx.rect(10,40,50,20); ctx.arc(60,50,15,0,Math.PI*2); ctx.fill(); ctx.rect(75,45,20,10); ctx.fill();
+    } else if (type === WeaponType.ArcTaser) {
+        ctx.rect(20,40,40,20); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(60,50); ctx.lineTo(70,35); ctx.lineTo(80,65); ctx.lineTo(90,50); ctx.stroke();
+    } else if (type === WeaponType.Sniper) {
+        ctx.fillRect(5, 42, 75, 10); ctx.fillRect(80, 40, 15, 14); // Barrel/Muzzle
+        ctx.rect(20, 32, 40, 6); ctx.fill(); // Scope
+        ctx.fillRect(20, 52, 10, 15); // Mag
+        ctx.beginPath(); ctx.moveTo(5, 52); ctx.lineTo(0, 65); ctx.lineTo(10, 65); ctx.lineTo(15, 52); ctx.fill(); // Stock
     }
     ctx.closePath();
     ctx.restore();
@@ -273,29 +295,37 @@ const drawLootItem = (ctx: CanvasRenderingContext2D, l: Loot, state: GameState, 
         }
         ctx.restore();
     } else if (l.type === 'item_drop') {
-        // Opened Gear Drop (Key handled by WorldKey now)
+        // Opened Gear Drop
         ctx.save(); ctx.translate(l.pos.x, l.pos.y);
         
-        // Interaction Text handled by overhead prompt logic now
-        
+        // Ground Glow
+        if (l.contents?.color) {
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = l.contents.color;
+        }
+
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '32px serif';
         if (l.contents?.type === 'key') {
-            // Fallback if logic somehow keeps key as item_drop
             ctx.fillText('🗝️', 0, 0); 
         }
         else if (l.contents?.type === 'gear') {
             const t = l.contents.stats?.type;
-            if (t === 'shield') ctx.fillText('🛡️', 0, 0);
-            else if (t === 'pen') ctx.fillText('✒️', 0, 0);
-            else if (t === 'turret') ctx.fillText('🤖', 0, 0); 
+            if (t === 'vest') ctx.fillText('🦺', 0, 0);
+            else if (t === 'speed_shoes') ctx.fillText('👟', 0, 0);
+            else if (t === 'mines') ctx.fillText('💣', 0, 0);
             else if (t === 'snowman') ctx.fillText('⛄', 0, 0);
-            else if (t === 'medkit') ctx.fillText('🏥', 0, 0);
-            else if (t === 'shoes') ctx.fillText('👟', 0, 0);
+            else if (t === 'elf_hat') ctx.fillText('🧢', 0, 0);
+            else if (t === 'turret') ctx.fillText('🤖', 0, 0); 
+            else if (t === 'regen') ctx.fillText('💗', 0, 0);
             else if (t === 'lightning') ctx.fillText('⚡', 0, 0);
-            else if (t === 'beaker') ctx.fillText('🧪', 0, 0);
-            else if (t === 'santa_hat') ctx.fillText('🎅', 0, 0);
+            else if (t === 'tesla') ctx.fillText('🔋', 0, 0);
+            else if (t === 'pen') ctx.fillText('✒️', 0, 0);
+            else if (t === 'sleighbells') ctx.fillText('🔔', 0, 0);
+            else if (t === 'reinforce') ctx.fillText('👮', 0, 0);
             else ctx.fillText('⚙️', 0, 0);
         } else ctx.fillText('❓', 0, 0);
+        
+        ctx.shadowBlur = 0;
         ctx.restore();
     } else if (l.type === 'weapon_drop' && l.color && l.weaponType) { 
         // Opened Weapon Drop
@@ -305,8 +335,12 @@ const drawLootItem = (ctx: CanvasRenderingContext2D, l: Loot, state: GameState, 
         ctx.fillStyle = '#1e293b'; 
         ctx.strokeStyle = l.color;
         ctx.lineWidth = 2;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = l.color;
+        
         ctx.fillRect(-25, -25, 50, 50); 
         ctx.strokeRect(-25, -25, 50, 50);
+        ctx.shadowBlur = 0;
         
         drawWeaponIcon(ctx, l.weaponType, 0, 0, 40);
         ctx.restore(); 
@@ -401,38 +435,116 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
     ctx.beginPath(); ctx.arc(0, 14, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
     // --- 2. WEAPON (Right Hand Side usually) ---
-    ctx.save();
-    const weaponType = p.weapon as WeaponType;
-    
-    if (weaponType === WeaponType.Pistol) {
-        ctx.translate(20, 13); 
-        ctx.fillStyle = '#171717'; ctx.fillRect(-5, -3, 12, 6);
-        ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, -3, 14, 6);
-        ctx.strokeStyle = '#000'; ctx.lineWidth=1; ctx.strokeRect(0, -3, 14, 6);
-    } 
-    else if (weaponType === WeaponType.Shotgun) {
-        ctx.translate(15, 13);
-        ctx.fillStyle = '#451a03'; ctx.fillRect(-10, -3, 15, 6);
-        ctx.fillStyle = '#0f172a'; ctx.fillRect(5, -4, 20, 8);
-        ctx.fillStyle = '#78350f'; ctx.fillRect(10, -5, 8, 10);
+    if (p.weapon) {
+        ctx.save();
+        const weaponType = p.weapon as WeaponType;
+        
+        if (weaponType === WeaponType.Pistol) {
+            ctx.translate(20, 13); 
+            ctx.fillStyle = '#171717'; ctx.fillRect(-5, -3, 12, 6);
+            ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, -3, 14, 6);
+            ctx.strokeStyle = '#000'; ctx.lineWidth=1; ctx.strokeRect(0, -3, 14, 6);
+        } 
+        else if (weaponType === WeaponType.Shotgun) {
+            ctx.translate(15, 13);
+            ctx.fillStyle = '#451a03'; ctx.fillRect(-10, -3, 15, 6);
+            ctx.fillStyle = '#0f172a'; ctx.fillRect(5, -4, 20, 8);
+            ctx.fillStyle = '#78350f'; ctx.fillRect(10, -5, 8, 10);
+        }
+        else if (weaponType === WeaponType.AR) {
+            ctx.translate(15, 13);
+            ctx.fillStyle = '#0f172a'; ctx.fillRect(-5, -4, 35, 8);
+            ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 8, 6); 
+            ctx.fillStyle = '#10b981'; ctx.fillRect(0, -6, 4, 2);
+        }
+        else if (weaponType === WeaponType.Flamethrower) {
+            ctx.translate(10, 13);
+            ctx.fillStyle = '#f97316'; ctx.fillRect(-12, -22, 12, 36); 
+            ctx.fillStyle = '#475569'; ctx.fillRect(10, -6, 25, 12);
+            ctx.fillStyle = '#ea580c'; ctx.fillRect(35, -4, 4, 8);
+        }
+        else if (weaponType === WeaponType.Snowball) {
+            // Holding a snowball
+            ctx.translate(20, 13);
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill();
+        }
+        else if (weaponType === WeaponType.Chainsaw) {
+            ctx.translate(20, 15);
+            ctx.fillStyle = '#facc15'; ctx.fillRect(-5, -6, 20, 12); // Body
+            ctx.fillStyle = '#334155'; ctx.fillRect(15, -2, 35, 4); // Blade
+        }
+        else if (weaponType === WeaponType.Boomerang) {
+            ctx.translate(20, 13);
+            ctx.rotate(-Math.PI/4);
+            ctx.fillStyle = '#a05a2c';
+            ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5,-10, 15, -5); ctx.quadraticCurveTo(5, -5, -5, 0); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5, 10, 15, 5); ctx.quadraticCurveTo(5, 5, -5, 0); ctx.fill();
+        }
+        else if (weaponType === WeaponType.Sword) {
+            // Swing Animation
+            const swingTime = 300;
+            const timeSinceShot = state.gameTime - p.lastShotTime;
+            let rot = 0;
+            if (timeSinceShot < swingTime) {
+                // Swipe from -45 to +45
+                const progress = timeSinceShot / swingTime;
+                rot = -Math.PI/4 + (Math.PI/2 * progress);
+            }
+
+            ctx.translate(10, 10);
+            ctx.rotate(rot);
+            ctx.translate(10, 0);
+
+            ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, -2, 40, 4); // Blade
+            ctx.fillStyle = '#475569'; ctx.fillRect(-5, -5, 5, 10); // Hilt
+        }
+        else if (weaponType === WeaponType.Laser) {
+            ctx.translate(20, 13);
+            ctx.fillStyle = '#b91c1c'; ctx.fillRect(-5, -4, 25, 8); // Body
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(20, -2, 5, 4); // Emitter
+            
+            // Beam Draw while firing (check last shot time proximity)
+            if (state.gameTime - p.lastShotTime < 100 && p.ammo > 0) {
+                ctx.shadowBlur = 10; ctx.shadowColor = '#ef4444';
+                ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(balance.weapons[WeaponType.Laser].range, 0); ctx.stroke();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(balance.weapons[WeaponType.Laser].range, 0); ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+        }
+        else if (weaponType === WeaponType.GrenadeLauncher) {
+            ctx.translate(15, 13);
+            ctx.fillStyle = '#1e293b'; ctx.fillRect(-5, -5, 25, 10); // Body
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(10, 0, 8, 0, Math.PI*2); ctx.fill(); // Drum
+            ctx.fillStyle = '#334155'; ctx.fillRect(20, -4, 15, 8); // Barrel
+        }
+        else if (weaponType === WeaponType.ArcTaser) {
+            ctx.translate(15, 13);
+            ctx.fillStyle = '#1e3a8a'; ctx.fillRect(-5, -5, 20, 10);
+            ctx.strokeStyle = '#60a5fa'; ctx.lineWidth=2;
+            ctx.beginPath(); ctx.moveTo(15, -3); ctx.lineTo(25, -3); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(15, 3); ctx.lineTo(25, 3); ctx.stroke();
+        }
+        else if (weaponType === WeaponType.Sniper) {
+            ctx.translate(15, 13);
+            ctx.fillStyle = '#1e293b'; ctx.fillRect(-5, -4, 45, 8); // Long Barrel
+            ctx.fillStyle = '#0f172a'; ctx.fillRect(-10, -3, 10, 6); // Stock
+            ctx.fillStyle = '#000'; ctx.fillRect(10, -8, 20, 4); // Scope
+            ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 6, 8); // Mag
+        }
+
+        ctx.restore();
     }
-    else if (weaponType === WeaponType.AR) {
-        ctx.translate(15, 13);
-        ctx.fillStyle = '#0f172a'; ctx.fillRect(-5, -4, 35, 8);
-        ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 8, 6); 
-        ctx.fillStyle = '#10b981'; ctx.fillRect(0, -6, 4, 2);
-    }
-    else if (weaponType === WeaponType.Flamethrower) {
-        ctx.translate(10, 13);
-        ctx.fillStyle = '#f97316'; ctx.fillRect(-12, -22, 12, 36); 
-        ctx.fillStyle = '#475569'; ctx.fillRect(10, -6, 25, 12);
-        ctx.fillStyle = '#ea580c'; ctx.fillRect(35, -4, 4, 8);
-    }
-    ctx.restore();
 
     // --- 3. HANDS ---
     ctx.fillStyle = '#fca5a5'; ctx.strokeStyle = '#b91c1c'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(18, 13, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    
+    // Draw left hand if unarmed to look balanced
+    if (!p.weapon) {
+        ctx.beginPath(); ctx.arc(18, -13, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    }
 
     // --- 4. HEAD ---
     ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
@@ -444,7 +556,7 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
     ctx.restore();
     
     // Reload Bar
-    if (p.reloadingUntil > state.gameTime) {
+    if (p.reloadingUntil > state.gameTime && p.weapon) {
         const totalTime = balance.weapons[p.weapon].reloadTime; const timeLeft = p.reloadingUntil - state.gameTime; const pct = 1 - (timeLeft / totalTime);
         ctx.fillStyle = '#334155'; ctx.fillRect(p.pos.x - 20, p.pos.y - 40, 40, 6); ctx.fillStyle = '#fbbf24'; ctx.fillRect(p.pos.x - 20, p.pos.y - 40, 40 * pct, 6);
     }
@@ -470,8 +582,8 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
             let isFull = false;
             
             if (closestLoot.type === 'weapon_drop' && closestLoot.weaponType && closestLoot.tier !== undefined) {
-                 const equippedTier = p.weaponTiers[p.weapon];
-                 // ONLY EQUIP IF TIER IS HIGHER, OTHERWISE STASH
+                 const equippedTier = p.weapon ? p.weaponTiers[p.weapon] : -1;
+                 // ONLY EQUIP IF TIER IS HIGHER OR UNARMED, OTHERWISE STASH
                  if (closestLoot.tier > equippedTier) {
                       actionText = `${actionLabel} EQUIP`;
                  } else {
@@ -707,6 +819,18 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
             }
         }); ctx.globalAlpha = 1.0;
 
+        // Mines
+        state.mines.forEach(m => {
+            if (m.dead) return;
+            ctx.save(); ctx.translate(m.pos.x, m.pos.y);
+            // Draw circle with blinking red light
+            ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = m.armed && Math.floor(state.gameTime / 500) % 2 === 0 ? '#ef4444' : '#475569';
+            ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.stroke();
+            ctx.restore();
+        });
+
         // Turrets
         state.turrets.forEach(t => {
             ctx.save(); ctx.translate(t.pos.x, t.pos.y);
@@ -728,6 +852,23 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
             ctx.fillStyle = 'red'; ctx.fillRect(-15, -40, 30, 4);
             ctx.fillStyle = 'green'; ctx.fillRect(-15, -40, 30 * (d.hp / d.maxHp), 4);
             ctx.restore();
+        });
+
+        // Reinforcements
+        state.reinforcements.forEach(r => {
+            ctx.save();
+            if (state.gameTime < r.immuneUntil) ctx.globalAlpha = 0.5 + Math.sin(state.gameTime/100)*0.3;
+            ctx.translate(r.pos.x, r.pos.y); ctx.rotate(r.rotation);
+            // Draw like player but blue uniform
+            ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.roundRect(-15, -16, 28, 32, 10); ctx.fill(); // Body
+            ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill(); // Helmet
+            ctx.fillStyle = '#93c5fd'; ctx.beginPath(); ctx.arc(18, 13, 5, 0, Math.PI*2); ctx.fill(); // Hand
+            ctx.restore(); ctx.globalAlpha = 1.0;
+            // HP Bar
+            if (r.hp < r.maxHp) {
+                ctx.fillStyle = 'red'; ctx.fillRect(r.pos.x - 15, r.pos.y - 30, 30, 4);
+                ctx.fillStyle = 'green'; ctx.fillRect(r.pos.x - 15, r.pos.y - 30, 30 * (r.hp / r.maxHp), 4);
+            }
         });
 
         // Clones
@@ -966,6 +1107,32 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
 
         state.projectiles.forEach(pr => { 
             const speed = Math.hypot(pr.velocity.x, pr.velocity.y); 
+            
+            // Special Draw for Boomerang
+            if (pr.boomerang) {
+                 ctx.save();
+                 ctx.translate(pr.pos.x, pr.pos.y);
+                 ctx.rotate(pr.rotation);
+                 ctx.fillStyle = '#a05a2c'; 
+                 ctx.beginPath(); ctx.moveTo(-5, -15); ctx.quadraticCurveTo(0, 0, 15, -5); ctx.lineTo(5, 5); ctx.quadraticCurveTo(0, 5, -5, 15); ctx.lineTo(-10, 5); ctx.fill();
+                 ctx.restore();
+                 return;
+            }
+
+            // Special Draw for Grenade
+            if (pr.isGrenade) {
+                ctx.save();
+                ctx.translate(pr.pos.x, pr.pos.y);
+                ctx.rotate(pr.rotation);
+                ctx.fillStyle = '#166534';
+                ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#4ade80';
+                ctx.beginPath(); ctx.arc(2,-2,2,0,Math.PI*2); ctx.fill();
+                ctx.restore();
+                return;
+            }
+
+            // Standard Draw
             if (speed > 5 || (pr.weaponType && pr.weaponType !== WeaponType.Flamethrower)) { 
                 ctx.beginPath(); ctx.lineWidth = pr.radius * 2; ctx.lineCap = 'round'; ctx.strokeStyle = pr.color; 
                 ctx.moveTo(pr.pos.x - pr.velocity.x, pr.pos.y - pr.velocity.y); 
@@ -996,6 +1163,9 @@ export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: n
             ctx.fillStyle = pt.color; ctx.globalAlpha = Math.min(1.0, pt.life); 
             if (pt.type === 'heart') { 
                 ctx.font = '20px serif'; ctx.textAlign = 'center'; ctx.fillText('❤️', pt.pos.x, pt.pos.y); 
+            } else if (pt.type === 'explosion') {
+                ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, 40 * pt.life, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fcd34d'; ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, 20 * pt.life, 0, Math.PI*2); ctx.fill();
             } else { 
                 ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, pt.size, 0, Math.PI * 2); ctx.fill(); 
             } 
