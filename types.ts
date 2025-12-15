@@ -1,5 +1,4 @@
 
-
 export enum WeaponType {
   Pistol = 'Pistol',
   Shotgun = 'Shotgun',
@@ -16,10 +15,12 @@ export enum WeaponType {
 }
 
 export enum EnemyType {
-  Green = 'Green', // Melee
-  Blue = 'Blue',   // Ranged
-  Red = 'Red',     // Fire/Tank
-  Boss = 'Boss'    // Santa Boss
+  M1 = 'M1',       // Zombie Elf (Melee)
+  Reindeer = 'Reindeer', // Crazed Reindeer (Fast/Hit-and-Run)
+  Tangler = 'Tangler', // Support Elf (Pulls player)
+  Chef = 'Chef',   // Grenadier Elf (AoE Zones)
+  Yeti = 'Yeti',   // Tank (Shockwave)
+  Boss = 'Boss'    // Bad Santa
 }
 
 export enum ItemTier {
@@ -75,6 +76,7 @@ export interface GameBalance {
         speed: number;
         hp: number;
         damage: number;
+        armor: number; // 0.0 to 1.0 (Damage Reduction)
         score: number;
         color: string;
         radius: number;
@@ -88,6 +90,7 @@ export interface GameBalance {
   economy: {
     coinDropRate: number; // 0-1 probability
     baseWeaponCost: number;
+    upgradeCosts: Record<ItemTier, number>; // Cost to upgrade FROM this tier
     sleighThresholds: {
       bronze: number;
       silver: number;
@@ -133,7 +136,7 @@ export interface Particle extends Entity {
   maxLife: number;
   color: string;
   size: number;
-  type: 'blood' | 'snow' | 'fire' | 'smoke' | 'spark' | 'casing' | 'heart' | 'explosion';
+  type: 'blood' | 'snow' | 'fire' | 'smoke' | 'spark' | 'casing' | 'heart' | 'explosion' | 'shockwave';
 }
 
 export interface Projectile extends Entity {
@@ -152,6 +155,9 @@ export interface Projectile extends Entity {
       distTotal: number;
   };
   isGrenade?: boolean;
+  isTanglerShot?: boolean;
+  isCandyGrenade?: boolean;
+  ownerId?: string; // ID of the entity that fired it (for drag mechanics)
 }
 
 export interface PoisonDot {
@@ -165,10 +171,14 @@ export interface Enemy extends Entity {
   hp: number;
   maxHp: number;
   attackCooldown: number;
+  specialCooldown?: number; // Used for Yeti Shockwave
   slowedUntil: number;
   poisonDots: PoisonDot[];
   spawnOrigin: Vector2;
   wanderTarget?: Vector2;
+  // AI State
+  aiState?: 'chase' | 'retreat' | 'grouping';
+  aiStateTimer?: number;
   // Boss Specific
   lastRedSummon?: number;
   lastBlueSummon?: number;
@@ -230,6 +240,8 @@ export interface MagicDrop extends Entity {
 export interface Puddle extends Entity {
     endTime: number;
     nextTick: number;
+    damage: number;
+    style: 'acid' | 'candy';
 }
 
 export interface LootContent {

@@ -1,10 +1,11 @@
 
-
-import { GameState, GameBalance, WorldPOI, WeaponType, Loot, EnemyType, ItemTier, Vector2 } from '../types.ts';
+import { GameState, GameBalance, WorldPOI, WeaponType, Loot, EnemyType, ItemTier, Vector2, Enemy, Projectile, Particle } from '../types.ts';
 import { MAP_SIZE, GRID_CELL_SIZE, POI_LOCATIONS, BUNKER_INT_SIZE, BUNKER_ZONES } from '../constants.ts';
 import { distance } from '../utils/math.ts';
 
-// --- PATTERNS ---
+// ==========================================
+// >>> ASSET GENERATION <<<
+// ==========================================
 
 export const createCamoPattern = () => {
     const pCanvas = document.createElement('canvas');
@@ -13,16 +14,20 @@ export const createCamoPattern = () => {
     const pCtx = pCanvas.getContext('2d'); 
     if (!pCtx) return null;
     
-    pCtx.fillStyle = '#334155'; 
+    // Dark base for Night Theme
+    pCtx.fillStyle = '#1e293b'; 
     pCtx.fillRect(0, 0, 256, 256);
     
-    for(let i=0; i<60; i++) { 
-        pCtx.fillStyle = Math.random() > 0.5 ? '#475569' : '#1e293b'; 
-        const w = 16 + Math.random() * 48; 
-        const h = 16 + Math.random() * 48; 
-        const x = Math.floor((Math.random() * 256) / 16) * 16; 
-        const y = Math.floor((Math.random() * 256) / 16) * 16; 
-        pCtx.fillRect(x, y, w, h); 
+    // Abstract geometric camo shapes
+    for(let i=0; i<40; i++) { 
+        pCtx.fillStyle = Math.random() > 0.5 ? '#334155' : '#0f172a'; 
+        const w = 32 + Math.random() * 64; 
+        const h = 32 + Math.random() * 64; 
+        const x = Math.random() * 256; 
+        const y = Math.random() * 256; 
+        pCtx.beginPath();
+        pCtx.rect(x, y, w, h);
+        pCtx.fill();
     }
     return pCtx.createPattern(pCanvas, 'repeat');
 };
@@ -34,31 +39,36 @@ export const createWoodPattern = () => {
     const ctx = pCanvas.getContext('2d'); 
     if (!ctx) return null;
     
-    ctx.fillStyle = '#a05a2c'; 
+    ctx.fillStyle = '#78350f'; 
     ctx.fillRect(0, 0, 64, 64); 
     
-    ctx.strokeStyle = '#5d3417'; 
+    // Wood grain lines
+    ctx.strokeStyle = '#451a03'; 
     ctx.lineWidth = 2; 
     ctx.beginPath(); 
-    for(let i=0; i<64; i+=16) { 
-        ctx.moveTo(0, i); ctx.lineTo(64, i); 
+    for(let i=0; i<64; i+=8) { 
+        ctx.moveTo(0, i + Math.random() * 4); 
+        ctx.lineTo(64, i + Math.random() * 4); 
     } 
     ctx.stroke();
-    
-    ctx.strokeStyle = '#784421'; 
-    ctx.lineWidth = 1; 
-    ctx.globalAlpha = 0.3; 
-    for(let i=0; i<10; i++) { 
-        ctx.beginPath(); 
-        const y = Math.random() * 64; 
-        ctx.moveTo(0, y); 
-        ctx.lineTo(64, y + Math.random() * 10 - 5); 
-        ctx.stroke(); 
-    }
     return ctx.createPattern(pCanvas, 'repeat');
 };
 
-// --- ICONS & ASSETS ---
+// ==========================================
+// >>> HELPER FUNCTIONS <<<
+// ==========================================
+
+// Check if an entity is within the camera's viewport + buffer
+const isVisible = (pos: Vector2, camera: Vector2, width: number, height: number, buffer: number = 200) => {
+    return pos.x >= camera.x - buffer &&
+           pos.x <= camera.x + width + buffer &&
+           pos.y >= camera.y - buffer &&
+           pos.y <= camera.y + height + buffer;
+};
+
+// ==========================================
+// >>> ENTITY DRAWING <<<
+// ==========================================
 
 const drawWeaponIcon = (ctx: CanvasRenderingContext2D, type: WeaponType, x: number, y: number, size: number) => {
     ctx.save();
@@ -66,9 +76,7 @@ const drawWeaponIcon = (ctx: CanvasRenderingContext2D, type: WeaponType, x: numb
     const scale = size / 100;
     ctx.scale(scale, scale);
     ctx.fillStyle = '#ffffff'; 
-
-    // Center the drawing roughly around 0,0 based on 100x100 coord system
-    ctx.translate(-50, -50);
+    ctx.translate(-50, -50); // Center at 0,0
 
     ctx.beginPath();
     if (type === WeaponType.Pistol) {
@@ -76,18 +84,18 @@ const drawWeaponIcon = (ctx: CanvasRenderingContext2D, type: WeaponType, x: numb
         ctx.lineTo(70, 55); ctx.lineTo(70, 85); ctx.lineTo(45, 85); 
         ctx.lineTo(45, 55); ctx.lineTo(20, 55); ctx.fill();
     } else if (type === WeaponType.Shotgun) {
-        ctx.moveTo(5, 45); ctx.lineTo(95, 45); ctx.lineTo(95, 55); ctx.lineTo(5, 55); ctx.fill(); // Barrel
-        ctx.beginPath(); ctx.rect(25, 58, 30, 8); ctx.fill(); // Pump
-        ctx.beginPath(); ctx.moveTo(5, 55); ctx.lineTo(15, 75); ctx.lineTo(5, 75); ctx.lineTo(0, 55); ctx.fill(); // Stock
+        ctx.moveTo(5, 45); ctx.lineTo(95, 45); ctx.lineTo(95, 55); ctx.lineTo(5, 55); ctx.fill();
+        ctx.beginPath(); ctx.rect(25, 58, 30, 8); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(5, 55); ctx.lineTo(15, 75); ctx.lineTo(5, 75); ctx.lineTo(0, 55); ctx.fill();
     } else if (type === WeaponType.AR) {
-        ctx.moveTo(10, 45); ctx.lineTo(90, 45); ctx.lineTo(90, 55); ctx.lineTo(10, 55); ctx.fill(); // Barrel/Body
-        ctx.beginPath(); ctx.rect(50, 55, 10, 20); ctx.fill(); // Mag
-        ctx.beginPath(); ctx.moveTo(10, 45); ctx.lineTo(0, 65); ctx.lineTo(15, 65); ctx.lineTo(20, 55); ctx.fill(); // Stock
-        ctx.beginPath(); ctx.rect(55, 38, 4, 7); ctx.fill(); // Sight
+        ctx.moveTo(10, 45); ctx.lineTo(90, 45); ctx.lineTo(90, 55); ctx.lineTo(10, 55); ctx.fill();
+        ctx.beginPath(); ctx.rect(50, 55, 10, 20); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(10, 45); ctx.lineTo(0, 65); ctx.lineTo(15, 65); ctx.lineTo(20, 55); ctx.fill();
+        ctx.beginPath(); ctx.rect(55, 38, 4, 7); ctx.fill();
     } else if (type === WeaponType.Flamethrower) {
-        ctx.rect(20, 35, 60, 30); ctx.fill(); // Tank
-        ctx.beginPath(); ctx.rect(80, 45, 15, 10); ctx.fill(); // Nozzle
-        ctx.beginPath(); ctx.moveTo(20, 45); ctx.lineTo(5, 45); ctx.lineTo(5, 65); ctx.lineTo(20, 55); ctx.fill(); // Handle
+        ctx.rect(20, 35, 60, 30); ctx.fill();
+        ctx.beginPath(); ctx.rect(80, 45, 15, 10); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(20, 45); ctx.lineTo(5, 45); ctx.lineTo(5, 65); ctx.lineTo(20, 55); ctx.fill();
     } else if (type === WeaponType.Snowball) {
         ctx.arc(50, 50, 30, 0, Math.PI*2); ctx.fill();
     } else if (type === WeaponType.Chainsaw) {
@@ -106,10 +114,10 @@ const drawWeaponIcon = (ctx: CanvasRenderingContext2D, type: WeaponType, x: numb
         ctx.rect(20,40,40,20); ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(60,50); ctx.lineTo(70,35); ctx.lineTo(80,65); ctx.lineTo(90,50); ctx.stroke();
     } else if (type === WeaponType.Sniper) {
-        ctx.fillRect(5, 42, 75, 10); ctx.fillRect(80, 40, 15, 14); // Barrel/Muzzle
-        ctx.rect(20, 32, 40, 6); ctx.fill(); // Scope
-        ctx.fillRect(20, 52, 10, 15); // Mag
-        ctx.beginPath(); ctx.moveTo(5, 52); ctx.lineTo(0, 65); ctx.lineTo(10, 65); ctx.lineTo(15, 52); ctx.fill(); // Stock
+        ctx.fillRect(5, 42, 75, 10); ctx.fillRect(80, 40, 15, 14);
+        ctx.rect(20, 32, 40, 6); ctx.fill();
+        ctx.fillRect(20, 52, 10, 15);
+        ctx.beginPath(); ctx.moveTo(5, 52); ctx.lineTo(0, 65); ctx.lineTo(10, 65); ctx.lineTo(15, 52); ctx.fill();
     }
     ctx.closePath();
     ctx.restore();
@@ -233,7 +241,7 @@ const drawPOI = (ctx: CanvasRenderingContext2D, poi: WorldPOI) => {
             ctx.fillStyle='#bae6fd'; ctx.beginPath(); ctx.ellipse(0,0,120,80,0,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(40,40); ctx.stroke(); 
             break;
     }
-     // Auto Label
+    // Labels
     if (!['elf_cafe', 'elf_bakery', 'sleigh', 'safe_house'].includes(poi.type)) {
         const overrides:any = { 'large_coal': 'COAL', 'flight_school': 'RUNWAY', 'elf_paint_shop': 'BLUE WORKSHOP', 'toy_workshop': 'RED WORKSHOP', 'magic_forest': 'MAGIC FOREST' };
         const offsets:any = { 'snowman_trio': -30, 'bear_cave': -90, 'giant_snowman': 50, 'north_pole': 40 };
@@ -245,156 +253,194 @@ const drawPOI = (ctx: CanvasRenderingContext2D, poi: WorldPOI) => {
     ctx.restore();
 };
 
-const drawLootItem = (ctx: CanvasRenderingContext2D, l: Loot, state: GameState, balance: GameBalance) => {
-    const p = state.player;
-    // "Present" state is now a Package (Rectangle or Diamond)
-    if (l.type === 'present') {
-        if (state.gamePhase === 'playing' && distance(l.pos, p.pos) < balance.player.pickupRadius) { 
-            ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2; ctx.beginPath(); 
-            ctx.arc(l.pos.x, l.pos.y, 40, 0, Math.PI * 2 * (l.pickupProgress / balance.player.pickupTime)); 
-            ctx.stroke(); 
-        }
-
-        const c = l.contents;
-        const color = c?.color || '#94a3b8';
-
-        ctx.save();
-        ctx.translate(l.pos.x, l.pos.y);
-        
-        // Draw Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(0, 15, 15, 5, 0, 0, Math.PI*2); ctx.fill();
-
-        if (c?.type === 'weapon_drop') {
-            // WEAPON PACKAGE: WIDE RECTANGLE + YELLOW RIBBON
-            ctx.fillStyle = color;
-            ctx.fillRect(-25, -10, 50, 20); // Wide base rectangle (50x20)
-            
-            // Yellow Ribbon (Cross)
-            ctx.fillStyle = '#facc15'; 
-            ctx.fillRect(-25, -2, 50, 4); // Horizontal band
-            ctx.fillRect(-3, -10, 6, 20); // Vertical band
-            
-            // Bow
-            ctx.beginPath(); ctx.arc(0, -5, 4, 0, Math.PI*2); ctx.fill();
-        } else {
-            // GEAR/KEY PACKAGE: DIAMOND + WHITE RIBBON
-            // Diamond = Rotated Square
-            ctx.rotate(Math.PI / 4);
-            
-            ctx.fillStyle = color;
-            ctx.fillRect(-14, -14, 28, 28);
-            
-            // White Ribbon (Cross relative to rotation)
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(-14, -3, 28, 6);
-            ctx.fillRect(-3, -14, 6, 28);
-            
-            // Bow
-            ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
-        }
-        ctx.restore();
-    } else if (l.type === 'item_drop') {
-        // Opened Gear Drop
-        ctx.save(); ctx.translate(l.pos.x, l.pos.y);
-        
-        // Ground Glow
-        if (l.contents?.color) {
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = l.contents.color;
-        }
-
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '32px serif';
-        if (l.contents?.type === 'key') {
-            ctx.fillText('🗝️', 0, 0); 
-        }
-        else if (l.contents?.type === 'gear') {
-            const t = l.contents.stats?.type;
-            if (t === 'vest') ctx.fillText('🦺', 0, 0);
-            else if (t === 'speed_shoes') ctx.fillText('👟', 0, 0);
-            else if (t === 'mines') ctx.fillText('💣', 0, 0);
-            else if (t === 'snowman') ctx.fillText('⛄', 0, 0);
-            else if (t === 'elf_hat') ctx.fillText('🧢', 0, 0);
-            else if (t === 'turret') ctx.fillText('🤖', 0, 0); 
-            else if (t === 'regen') ctx.fillText('💗', 0, 0);
-            else if (t === 'lightning') ctx.fillText('⚡', 0, 0);
-            else if (t === 'tesla') ctx.fillText('🔋', 0, 0);
-            else if (t === 'pen') ctx.fillText('✒️', 0, 0);
-            else if (t === 'sleighbells') ctx.fillText('🔔', 0, 0);
-            else if (t === 'reinforce') ctx.fillText('👮', 0, 0);
-            else ctx.fillText('⚙️', 0, 0);
-        } else ctx.fillText('❓', 0, 0);
-        
-        ctx.shadowBlur = 0;
-        ctx.restore();
-    } else if (l.type === 'weapon_drop' && l.color && l.weaponType) { 
-        // Opened Weapon Drop
-        ctx.save(); ctx.translate(l.pos.x, l.pos.y); 
-        
-        // Draw Item Box
-        ctx.fillStyle = '#1e293b'; 
-        ctx.strokeStyle = l.color;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = l.color;
-        
-        ctx.fillRect(-25, -25, 50, 50); 
-        ctx.strokeRect(-25, -25, 50, 50);
-        ctx.shadowBlur = 0;
-        
-        drawWeaponIcon(ctx, l.weaponType, 0, 0, 40);
-        ctx.restore(); 
-    }
-};
-
-const drawWorldMedkit = (ctx: CanvasRenderingContext2D, m: any) => {
-    ctx.save(); ctx.translate(m.pos.x, m.pos.y);
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(-10, -10, 20, 20);
-    ctx.fillStyle = '#ef4444'; ctx.fillRect(-3, -8, 6, 16); ctx.fillRect(-8, -3, 16, 6);
-    ctx.restore();
-};
-
-const drawOverheadPrompt = (ctx: CanvasRenderingContext2D, pos: Vector2, text: string) => {
+const drawEnemy = (ctx: CanvasRenderingContext2D, e: Enemy, gameTime: number, balance: GameBalance) => {
     ctx.save();
-    // Twice as far above the player (was 38, now 75)
-    ctx.translate(pos.x, pos.y - 75);
+    ctx.translate(e.pos.x, e.pos.y);
+    const stats = balance.enemies.types[e.type];
 
-    ctx.font = '900 12px monospace';
-    const tm = ctx.measureText(text);
-    
-    // 25% Wider and Taller than previous
-    const w = (tm.width + 16) * 1.25;
-    const h = 22 * 1.25;
-    const r = 8;
+    if (e.type === EnemyType.M1) {
+        // M1 Zombie Elf Art
+        const stagger = Math.sin(gameTime / 150 + parseFloat('0.'+e.id.replace(/\D/g,''))) * 0.3;
+        ctx.rotate(e.rotation + Math.PI/2 + stagger);
 
-    // Shadow
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
+        // Body
+        ctx.fillStyle = '#14532d'; 
+        ctx.fillRect(-12, -14, 24, 20);
 
-    // Background
-    ctx.fillStyle = '#ea580c'; // Orange-600
-    ctx.beginPath();
-    const x = -w/2, y = -h/2;
-    ctx.moveTo(x+r, y);
-    ctx.arcTo(x+w, y, x+w, y+h, r);
-    ctx.arcTo(x+w, y+h, x, y+h, r);
-    ctx.arcTo(x, y+h, x, y, r);
-    ctx.arcTo(x, y, x+w, y, r);
-    ctx.closePath();
-    ctx.fill();
+        // Tatters
+        ctx.fillStyle = '#052e16'; 
+        ctx.fillRect(-12, -8, 24, 3);
+        ctx.fillRect(-12, 0, 24, 2);
 
-    // Border
-    ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = '#fb923c'; // Orange-400
-    ctx.lineWidth = 2;
-    ctx.stroke();
+        // Shoulders
+        ctx.fillStyle = '#14532d';
+        ctx.beginPath(); ctx.arc(-10, -10, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(10, -10, 6, 0, Math.PI*2); ctx.fill();
 
-    // Text
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 0, 1);
+        // Head
+        ctx.fillStyle = '#86efac';
+        ctx.beginPath(); ctx.arc(0, -6, 11, 0, Math.PI*2); ctx.fill();
+
+        // Hat
+        ctx.fillStyle = '#b91c1c'; 
+        ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(10, -10); ctx.lineTo(0, -35); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(0, -35, 4, 0, Math.PI*2); ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath(); ctx.arc(-4, -8, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(4, -8, 2.5, 0, Math.PI*2); ctx.fill();
+
+    } else if (e.type === EnemyType.Reindeer) {
+        // Crazed Reindeer
+        ctx.rotate(e.rotation + Math.PI/2);
+        // Body (Oval)
+        ctx.fillStyle = '#78350f'; // Dark Brown
+        ctx.beginPath(); ctx.ellipse(0, 0, 12, 20, 0, 0, Math.PI*2); ctx.fill();
+        
+        // Head
+        ctx.translate(0, -15);
+        ctx.fillStyle = '#5c2b0b'; // Slightly darker head
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+        
+        // Nose (Glowing Red)
+        ctx.fillStyle = '#ef4444';
+        ctx.shadowBlur = 5; ctx.shadowColor = '#ef4444';
+        ctx.beginPath(); ctx.arc(0, -6, 3, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Eyes (Small red dots)
+        ctx.fillStyle = '#f87171';
+        ctx.beginPath(); ctx.arc(-3, -2, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(3, -2, 1.5, 0, Math.PI*2); ctx.fill();
+
+        // Antlers
+        ctx.strokeStyle = '#fcd34d'; // Bone/Light color
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); 
+        // Left Antler
+        ctx.moveTo(-4, -6); ctx.lineTo(-12, -15); ctx.lineTo(-8, -18); 
+        ctx.moveTo(-12, -15); ctx.lineTo(-16, -12); 
+        // Right Antler
+        ctx.moveTo(4, -6); ctx.lineTo(12, -15); ctx.lineTo(8, -18); 
+        ctx.moveTo(12, -15); ctx.lineTo(16, -12); 
+        ctx.stroke();
+
+    } else if (e.type === EnemyType.Tangler) {
+        // Tangler Elf (Blue, Lights)
+        const stagger = Math.sin(gameTime / 150) * 0.2;
+        ctx.rotate(e.rotation + Math.PI/2 + stagger);
+
+        // Body
+        ctx.fillStyle = '#0e7490'; // Cyan/Blue
+        ctx.fillRect(-10, -16, 20, 24); // Taller
+
+        // Lights (Wrapped)
+        const time = gameTime / 200;
+        for(let i=0; i<3; i++) {
+            const y = -14 + i * 8;
+            ctx.strokeStyle = `hsl(${(time * 50 + i * 60) % 360}, 100%, 50%)`;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-10, y); ctx.lineTo(10, y + 4); ctx.stroke();
+        }
+
+        // Head
+        ctx.fillStyle = '#cffafe';
+        ctx.beginPath(); ctx.arc(0, -8, 10, 0, Math.PI*2); ctx.fill();
+
+        // Hat
+        ctx.fillStyle = '#155e75';
+        ctx.beginPath(); ctx.moveTo(-10, -12); ctx.lineTo(10, -12); ctx.lineTo(0, -40); ctx.fill();
+        
+        // Eyes
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(-4, -8, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(4, -8, 2, 0, Math.PI*2); ctx.fill();
+
+    } else if (e.type === EnemyType.Chef) {
+        const stagger = Math.sin(gameTime / 150) * 0.2;
+        ctx.rotate(e.rotation + Math.PI/2 + stagger);
+
+        // Body (Bloated)
+        ctx.fillStyle = '#fef3c7'; // Cream
+        ctx.beginPath(); ctx.arc(0, -5, 18, 0, Math.PI*2); ctx.fill();
+        
+        // Apron
+        ctx.fillStyle = '#b91c1c';
+        ctx.fillRect(-12, -15, 24, 25);
+
+        // Head
+        ctx.fillStyle = '#fecaca';
+        ctx.beginPath(); ctx.arc(0, -8, 12, 0, Math.PI*2); ctx.fill();
+
+        // Chef Hat
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(-14, -18); ctx.lineTo(14, -18); ctx.lineTo(16, -45); ctx.lineTo(-16, -45);
+        ctx.fill();
+        // Hat Puff
+        ctx.beginPath(); ctx.arc(0, -45, 16, Math.PI, 0); ctx.fill();
+
+        // Sack
+        ctx.fillStyle = '#fcd34d';
+        ctx.beginPath(); ctx.arc(15, 10, 8, 0, Math.PI*2); ctx.fill();
+
+    } else if (e.type === EnemyType.Yeti) {
+        // Yeti
+        const walk = Math.sin(gameTime / 300) * 5;
+        ctx.rotate(e.rotation + Math.PI/2);
+
+        // Body (Large Furry)
+        ctx.fillStyle = '#e2e8f0'; // Slate 200
+        ctx.beginPath(); ctx.ellipse(0, 0, 25, 40, 0, 0, Math.PI*2); ctx.fill();
+        
+        // Shoulders
+        ctx.beginPath(); ctx.arc(-20, -15 + walk, 15, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(20, -15 - walk, 15, 0, Math.PI*2); ctx.fill();
+
+        // Head
+        ctx.fillStyle = '#f8fafc';
+        ctx.beginPath(); ctx.arc(0, -25, 20, 0, Math.PI*2); ctx.fill();
+
+        // Face
+        ctx.fillStyle = '#94a3b8'; // Darker skin
+        ctx.beginPath(); ctx.arc(0, -25, 10, 0, Math.PI*2); ctx.fill();
+        
+        // Eyes (Blue glowing)
+        ctx.fillStyle = '#60a5fa';
+        ctx.beginPath(); ctx.arc(-4, -28, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(4, -28, 3, 0, Math.PI*2); ctx.fill();
+
+    } else if (e.type === EnemyType.Boss) {
+        // Boss Art
+        ctx.beginPath(); ctx.arc(0, 0, e.radius, 0, Math.PI * 2); ctx.fill(); 
+        ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill(); 
+        ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(-15, -10, 5, 0, Math.PI * 2); ctx.arc(15, -10, 5, 0, Math.PI * 2); ctx.fill(); 
+        ctx.rotate(e.rotation - Math.PI/2); 
+        ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(-30, -20); ctx.lineTo(30, -20); ctx.lineTo(0, -80); ctx.fill(); 
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(-35, -20, 70, 15); 
+        ctx.beginPath(); ctx.arc(0, -80, 10, 0, Math.PI*2); ctx.fill(); 
+
+    } else {
+        // Generic Fallback (Should typically only catch M1 if art fails)
+        ctx.fillStyle = stats.color;
+        ctx.beginPath(); ctx.arc(0, 0, e.radius, 0, Math.PI * 2); ctx.fill(); 
+        ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(-5, -5, 3, 0, Math.PI * 2); ctx.arc(5, -5, 3, 0, Math.PI * 2); ctx.fill(); 
+    }
+
+    // HP Bar
+    if (e.hp < e.maxHp) { 
+        ctx.restore(); ctx.save(); ctx.translate(e.pos.x, e.pos.y);
+        const yOff = e.type === EnemyType.Boss ? 120 : e.type === EnemyType.Yeti ? 60 : 35;
+        const width = e.type === EnemyType.Boss ? 120 : e.type === EnemyType.Yeti ? 60 : 40;
+        ctx.fillStyle = 'red'; ctx.fillRect(-width/2, -yOff, width, 4); 
+        ctx.fillStyle = 'green'; ctx.fillRect(-width/2, -yOff, width * (e.hp / e.maxHp), 4); 
+        if (e.type === EnemyType.Boss || e.type === EnemyType.Yeti) {
+             ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(-width/2, -yOff, width, 4);
+        }
+    }
 
     ctx.restore();
 };
@@ -420,136 +466,52 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
 
     ctx.rotate(p.angle);
 
-    // --- 1. TACTICAL VEST (Body) ---
-    ctx.fillStyle = '#335c67'; 
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(-15, -16, 28, 32, 10);
-    ctx.fill();
-    ctx.stroke();
-
-    // Shoulder Pads
+    // Body (Tactical Vest)
+    ctx.fillStyle = '#335c67'; ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-15, -16, 28, 32, 10); ctx.fill(); ctx.stroke();
+    // Shoulders
     ctx.fillStyle = '#669999';
     ctx.beginPath(); ctx.arc(0, -14, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.arc(0, 14, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-    // --- 2. WEAPON (Right Hand Side usually) ---
+    // Weapon
     if (p.weapon) {
         ctx.save();
-        const weaponType = p.weapon as WeaponType;
-        
-        if (weaponType === WeaponType.Pistol) {
-            ctx.translate(20, 13); 
-            ctx.fillStyle = '#171717'; ctx.fillRect(-5, -3, 12, 6);
-            ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, -3, 14, 6);
-            ctx.strokeStyle = '#000'; ctx.lineWidth=1; ctx.strokeRect(0, -3, 14, 6);
-        } 
-        else if (weaponType === WeaponType.Shotgun) {
-            ctx.translate(15, 13);
-            ctx.fillStyle = '#451a03'; ctx.fillRect(-10, -3, 15, 6);
-            ctx.fillStyle = '#0f172a'; ctx.fillRect(5, -4, 20, 8);
-            ctx.fillStyle = '#78350f'; ctx.fillRect(10, -5, 8, 10);
+        const w = p.weapon as WeaponType;
+        if (w === WeaponType.Pistol) { ctx.translate(20, 13); ctx.fillStyle = '#171717'; ctx.fillRect(-5, -3, 12, 6); ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, -3, 14, 6); ctx.strokeRect(0, -3, 14, 6); } 
+        else if (w === WeaponType.Shotgun) { ctx.translate(15, 13); ctx.fillStyle = '#451a03'; ctx.fillRect(-10, -3, 15, 6); ctx.fillStyle = '#0f172a'; ctx.fillRect(5, -4, 20, 8); ctx.fillStyle = '#78350f'; ctx.fillRect(10, -5, 8, 10); }
+        else if (w === WeaponType.AR) { ctx.translate(15, 13); ctx.fillStyle = '#0f172a'; ctx.fillRect(-5, -4, 35, 8); ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 8, 6); ctx.fillStyle = '#10b981'; ctx.fillRect(0, -6, 4, 2); }
+        else if (w === WeaponType.Flamethrower) { ctx.translate(10, 13); ctx.fillStyle = '#f97316'; ctx.fillRect(-12, -22, 12, 36); ctx.fillStyle = '#475569'; ctx.fillRect(10, -6, 25, 12); ctx.fillStyle = '#ea580c'; ctx.fillRect(35, -4, 4, 8); }
+        else if (w === WeaponType.Snowball) { ctx.translate(20, 13); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill(); }
+        else if (w === WeaponType.Chainsaw) { ctx.translate(20, 15); ctx.fillStyle = '#facc15'; ctx.fillRect(-5, -6, 20, 12); ctx.fillStyle = '#334155'; ctx.fillRect(15, -2, 35, 4); }
+        else if (w === WeaponType.Boomerang) { ctx.translate(20, 13); ctx.rotate(-Math.PI/4); ctx.fillStyle = '#a05a2c'; ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5,-10, 15, -5); ctx.quadraticCurveTo(5, -5, -5, 0); ctx.fill(); ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5, 10, 15, 5); ctx.quadraticCurveTo(5, 5, -5, 0); ctx.fill(); }
+        else if (w === WeaponType.Sword) { 
+            const swingTime = 300; const timeSinceShot = state.gameTime - p.lastShotTime; let rot = 0;
+            if (timeSinceShot < swingTime) { const progress = timeSinceShot / swingTime; rot = -Math.PI/4 + (Math.PI/2 * progress); }
+            ctx.translate(10, 10); ctx.rotate(rot); ctx.translate(10, 0); ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, -2, 40, 4); ctx.fillStyle = '#475569'; ctx.fillRect(-5, -5, 5, 10); 
         }
-        else if (weaponType === WeaponType.AR) {
-            ctx.translate(15, 13);
-            ctx.fillStyle = '#0f172a'; ctx.fillRect(-5, -4, 35, 8);
-            ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 8, 6); 
-            ctx.fillStyle = '#10b981'; ctx.fillRect(0, -6, 4, 2);
-        }
-        else if (weaponType === WeaponType.Flamethrower) {
-            ctx.translate(10, 13);
-            ctx.fillStyle = '#f97316'; ctx.fillRect(-12, -22, 12, 36); 
-            ctx.fillStyle = '#475569'; ctx.fillRect(10, -6, 25, 12);
-            ctx.fillStyle = '#ea580c'; ctx.fillRect(35, -4, 4, 8);
-        }
-        else if (weaponType === WeaponType.Snowball) {
-            // Holding a snowball
-            ctx.translate(20, 13);
-            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI*2); ctx.fill();
-        }
-        else if (weaponType === WeaponType.Chainsaw) {
-            ctx.translate(20, 15);
-            ctx.fillStyle = '#facc15'; ctx.fillRect(-5, -6, 20, 12); // Body
-            ctx.fillStyle = '#334155'; ctx.fillRect(15, -2, 35, 4); // Blade
-        }
-        else if (weaponType === WeaponType.Boomerang) {
-            ctx.translate(20, 13);
-            ctx.rotate(-Math.PI/4);
-            ctx.fillStyle = '#a05a2c';
-            ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5,-10, 15, -5); ctx.quadraticCurveTo(5, -5, -5, 0); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5, 10, 15, 5); ctx.quadraticCurveTo(5, 5, -5, 0); ctx.fill();
-        }
-        else if (weaponType === WeaponType.Sword) {
-            // Swing Animation
-            const swingTime = 300;
-            const timeSinceShot = state.gameTime - p.lastShotTime;
-            let rot = 0;
-            if (timeSinceShot < swingTime) {
-                // Swipe from -45 to +45
-                const progress = timeSinceShot / swingTime;
-                rot = -Math.PI/4 + (Math.PI/2 * progress);
-            }
-
-            ctx.translate(10, 10);
-            ctx.rotate(rot);
-            ctx.translate(10, 0);
-
-            ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, -2, 40, 4); // Blade
-            ctx.fillStyle = '#475569'; ctx.fillRect(-5, -5, 5, 10); // Hilt
-        }
-        else if (weaponType === WeaponType.Laser) {
-            ctx.translate(20, 13);
-            ctx.fillStyle = '#b91c1c'; ctx.fillRect(-5, -4, 25, 8); // Body
-            ctx.fillStyle = '#ef4444'; ctx.fillRect(20, -2, 5, 4); // Emitter
-            
-            // Beam Draw while firing (check last shot time proximity)
+        else if (w === WeaponType.Laser) { 
+            ctx.translate(20, 13); ctx.fillStyle = '#b91c1c'; ctx.fillRect(-5, -4, 25, 8); ctx.fillStyle = '#ef4444'; ctx.fillRect(20, -2, 5, 4);
             if (state.gameTime - p.lastShotTime < 100 && p.ammo > 0) {
-                ctx.shadowBlur = 10; ctx.shadowColor = '#ef4444';
-                ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
+                ctx.shadowBlur = 10; ctx.shadowColor = '#ef4444'; ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
                 ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(balance.weapons[WeaponType.Laser].range, 0); ctx.stroke();
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(balance.weapons[WeaponType.Laser].range, 0); ctx.stroke();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(balance.weapons[WeaponType.Laser].range, 0); ctx.stroke();
                 ctx.shadowBlur = 0;
             }
         }
-        else if (weaponType === WeaponType.GrenadeLauncher) {
-            ctx.translate(15, 13);
-            ctx.fillStyle = '#1e293b'; ctx.fillRect(-5, -5, 25, 10); // Body
-            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(10, 0, 8, 0, Math.PI*2); ctx.fill(); // Drum
-            ctx.fillStyle = '#334155'; ctx.fillRect(20, -4, 15, 8); // Barrel
-        }
-        else if (weaponType === WeaponType.ArcTaser) {
-            ctx.translate(15, 13);
-            ctx.fillStyle = '#1e3a8a'; ctx.fillRect(-5, -5, 20, 10);
-            ctx.strokeStyle = '#60a5fa'; ctx.lineWidth=2;
-            ctx.beginPath(); ctx.moveTo(15, -3); ctx.lineTo(25, -3); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(15, 3); ctx.lineTo(25, 3); ctx.stroke();
-        }
-        else if (weaponType === WeaponType.Sniper) {
-            ctx.translate(15, 13);
-            ctx.fillStyle = '#1e293b'; ctx.fillRect(-5, -4, 45, 8); // Long Barrel
-            ctx.fillStyle = '#0f172a'; ctx.fillRect(-10, -3, 10, 6); // Stock
-            ctx.fillStyle = '#000'; ctx.fillRect(10, -8, 20, 4); // Scope
-            ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 6, 8); // Mag
-        }
-
+        else if (w === WeaponType.GrenadeLauncher) { ctx.translate(15, 13); ctx.fillStyle = '#1e293b'; ctx.fillRect(-5, -5, 25, 10); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(10, 0, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#334155'; ctx.fillRect(20, -4, 15, 8); }
+        else if (w === WeaponType.ArcTaser) { ctx.translate(15, 13); ctx.fillStyle = '#1e3a8a'; ctx.fillRect(-5, -5, 20, 10); ctx.strokeStyle = '#60a5fa'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(15, -3); ctx.lineTo(25, -3); ctx.stroke(); ctx.beginPath(); ctx.moveTo(15, 3); ctx.lineTo(25, 3); ctx.stroke(); }
+        else if (w === WeaponType.Sniper) { ctx.translate(15, 13); ctx.fillStyle = '#1e293b'; ctx.fillRect(-5, -4, 45, 8); ctx.fillStyle = '#0f172a'; ctx.fillRect(-10, -3, 10, 6); ctx.fillStyle = '#000'; ctx.fillRect(10, -8, 20, 4); ctx.fillStyle = '#334155'; ctx.fillRect(5, 4, 6, 8); }
         ctx.restore();
     }
 
-    // --- 3. HANDS ---
+    // Hands
     ctx.fillStyle = '#fca5a5'; ctx.strokeStyle = '#b91c1c'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(18, 13, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    
-    // Draw left hand if unarmed to look balanced
-    if (!p.weapon) {
-        ctx.beginPath(); ctx.arc(18, -13, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    }
+    if (!p.weapon) { ctx.beginPath(); ctx.arc(18, -13, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
 
-    // --- 4. HEAD ---
+    // Head + Hat
     ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-
-    // --- 5. HAT (Black Baseball Cap) ---
     ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#171717'; ctx.fillRect(4, -8, 10, 16); 
     
@@ -557,648 +519,416 @@ export const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, bala
     
     // Reload Bar
     if (p.reloadingUntil > state.gameTime && p.weapon) {
-        const totalTime = balance.weapons[p.weapon].reloadTime; const timeLeft = p.reloadingUntil - state.gameTime; const pct = 1 - (timeLeft / totalTime);
-        ctx.fillStyle = '#334155'; ctx.fillRect(p.pos.x - 20, p.pos.y - 40, 40, 6); ctx.fillStyle = '#fbbf24'; ctx.fillRect(p.pos.x - 20, p.pos.y - 40, 40 * pct, 6);
-    }
-
-    // Interaction Prompt Overhead
-    if (state.gamePhase === 'playing') {
-        const actionLabel = state.isMobile ? "[TAP]" : "[E]";
-        let actionText = "";
-        
-        let closestLoot: Loot | null = null;
-        let minDst = balance.player.pickupRadius;
-        
-        for (const l of state.loot) {
-             if (l.type === 'present' || l.dead) continue;
-             const d = distance(p.pos, l.pos);
-             if (d < minDst) {
-                 minDst = d;
-                 closestLoot = l;
-             }
-        }
-
-        if (closestLoot) {
-            let isFull = false;
-            
-            if (closestLoot.type === 'weapon_drop' && closestLoot.weaponType && closestLoot.tier !== undefined) {
-                 const equippedTier = p.weapon ? p.weaponTiers[p.weapon] : -1;
-                 // ONLY EQUIP IF TIER IS HIGHER OR UNARMED, OTHERWISE STASH
-                 if (closestLoot.tier > equippedTier) {
-                      actionText = `${actionLabel} EQUIP`;
-                 } else {
-                      if (p.inventory.length < 6) actionText = `${actionLabel} STASH`;
-                      else isFull = true;
-                 }
-            } else if (closestLoot.type === 'item_drop' && closestLoot.contents) {
-                 const c = closestLoot.contents;
-                 // Key is no longer an interact item via [E], handled via WorldKey
-                 if (c.type === 'key') {
-                     // Do nothing, handled by auto-pickup or WorldKey logic if converted
-                 } else {
-                     let canEquip = false;
-                     if (c.type === 'gear') {
-                          canEquip = p.equippedGear.some(s => s === null);
-                     }
-                     const hasWeaponToDrop = p.inventory.some(i => i.type === 'weapon');
-                     const canStash = p.inventory.length < 6;
-                     
-                     if (canEquip) actionText = `${actionLabel} EQUIP`;
-                     else if (canStash || hasWeaponToDrop) actionText = `${actionLabel} STASH`;
-                     else isFull = true;
-                 }
-            }
-            if (isFull) {
-                // Optional: Draw text directly instead of prompt bubble if just "FULL"
-            }
-        }
-        
-        // If no loot interaction or player chose to prioritize bunker (logic below determines visual)
-        // Let's say we prioritize loot if standing ON it, otherwise Bunker.
-        // But for now, if no loot text, check Bunker.
-        if (!actionText && !state.inBunker) {
-             for(let i=0; i<state.activeBunkers.length; i++) {
-                 // Check proximity to bunker. Interaction system uses 100.
-                 // We use 120 for visual prompt to appear slightly before interaction is valid.
-                 if (distance(p.pos, state.activeBunkers[i]) < 120) {
-                     const unlocked = state.unlockedBunkers.get(i) === state.wave;
-                     if (unlocked) {
-                         // Even if unlocked, entering is an action.
-                         actionText = `${actionLabel} ENTER`;
-                     } else if (p.keys > 0) {
-                         actionText = `${actionLabel} USE KEY`;
-                     }
-                     if (actionText) break;
-                 }
-             }
-        }
-        
-        if (actionText) {
-            drawOverheadPrompt(ctx, p.pos, actionText);
-        }
+        const totalTime = balance.weapons[p.weapon].reloadTime; 
+        const pct = 1 - ((p.reloadingUntil - state.gameTime) / totalTime);
+        ctx.fillStyle = '#334155'; ctx.fillRect(p.pos.x - 20, p.pos.y - 40, 40, 6); 
+        ctx.fillStyle = '#fbbf24'; ctx.fillRect(p.pos.x - 20, p.pos.y - 40, 40 * pct, 6);
     }
 };
 
+// ==========================================
+// >>> MAIN DRAW LOOP <<<
+// ==========================================
+
 export const drawGame = (ctx: CanvasRenderingContext2D, width: number, height: number, state: GameState, balance: GameBalance, assets: { bg: CanvasPattern | null, wood: CanvasPattern | null }) => {
-    const p = state.player;
-    const camera = state.camera;
-    
-    // Camera Update Logic (Moved here to ensure sync with frame)
-    if (state.exitAnim.active) {
-        // Camera follows player during exit
-        camera.x = p.pos.x - width / 2;
-        camera.y = p.pos.y - height / 2;
-    } else {
-        camera.x = p.pos.x - width / 2;
-        camera.y = p.pos.y - height / 2;
-        if (state.screenShake > 0) {
-            camera.x += (Math.random() - 0.5) * state.screenShake;
-            camera.y += (Math.random() - 0.5) * state.screenShake;
-            state.screenShake *= 0.9;
-            if (state.screenShake < 0.5) state.screenShake = 0;
-        }
-        if (!state.inBunker) {
-            camera.x = Math.max(0, Math.min(MAP_SIZE - width, camera.x));
-            camera.y = Math.max(0, Math.min(MAP_SIZE - height, camera.y));
-        }
+    // Update Camera
+    if (!state.inBunker) {
+        state.camera.x = state.player.pos.x - width / 2;
+        state.camera.y = state.player.pos.y - height / 2;
+        // Clamp
+        state.camera.x = Math.max(0, Math.min(state.camera.x, MAP_SIZE - width));
+        state.camera.y = Math.max(0, Math.min(state.camera.y, MAP_SIZE - height));
+    }
+
+    // Clear
+    ctx.fillStyle = '#0f172a'; // Slate 900
+    ctx.fillRect(0, 0, width, height);
+
+    if (state.inBunker) {
+        // Draw Bunker
+        ctx.save();
+        // Center bunker on screen
+        const bx = (width - BUNKER_INT_SIZE.w) / 2;
+        const by = (height - BUNKER_INT_SIZE.h) / 2;
+        ctx.translate(bx, by);
+        
+        // Floor
+        ctx.fillStyle = assets.wood || '#573618';
+        ctx.fillRect(0, 0, BUNKER_INT_SIZE.w, BUNKER_INT_SIZE.h);
+        
+        // Zones
+        const drawZone = (zone: any, color: string, label: string) => {
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.beginPath(); ctx.arc(zone.x, zone.y, zone.radius - 5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText(label, zone.x, zone.y + 4);
+        };
+
+        drawZone(BUNKER_ZONES.EXIT, '#ef4444', 'EXIT');
+        drawZone(BUNKER_ZONES.CRAFTING, '#3b82f6', 'CRAFT');
+        drawZone(BUNKER_ZONES.SELL, '#eab308', 'SELL');
+        drawZone(BUNKER_ZONES.GUNSMITH, '#64748b', 'GUNS');
+
+        // Player
+        drawPlayer(ctx, state, balance);
+        
+        // Floating Texts in Bunker
+        state.floatingTexts.forEach(t => {
+            ctx.save();
+            ctx.translate(t.pos.x, t.pos.y);
+            ctx.fillStyle = t.color;
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(t.text, 0, 0);
+            ctx.restore();
+        });
+
+        ctx.restore();
+        return;
     }
 
     ctx.save();
-    ctx.translate(-camera.x, -camera.y);
+    ctx.translate(-state.camera.x, -state.camera.y);
 
-    // --- WORLD DRAW (Always draw world unless in bunker, even in menu for BG) ---
-    if (!state.inBunker) {
-        ctx.fillStyle = '#1e293b'; 
-        if (assets.bg) ctx.fillStyle = assets.bg; 
-        ctx.fillRect(camera.x, camera.y, width, height);
-        
-        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; ctx.globalAlpha = 0.3; 
-        const gridSize = 100; 
-        const startX = Math.floor(camera.x / gridSize) * gridSize; 
-        const startY = Math.floor(camera.y / gridSize) * gridSize; 
-        ctx.beginPath(); 
-        for(let x = startX; x < camera.x + width + gridSize; x += gridSize) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + height); } 
-        for(let y = startY; y < camera.y + height + gridSize; y += gridSize) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + width, y); } 
-        ctx.stroke(); 
-        ctx.globalAlpha = 1.0;
-        
-        // Hazard Stripes on Map Borders
-        ctx.fillStyle = '#ef4444'; ctx.globalAlpha = 0.6; 
-        for (let gx = 0; gx < 5; gx++) { 
-            for (let gy = 0; gy < 5; gy++) { 
-                if (gx === 2 && gy === 2) continue; 
-                const cx = gx * GRID_CELL_SIZE + GRID_CELL_SIZE / 2; 
-                const cy = gy * GRID_CELL_SIZE + GRID_CELL_SIZE / 2; 
-                const mapCenter = MAP_SIZE / 2; 
-                const angle = Math.atan2(mapCenter - cy, mapCenter - cx); 
-                ctx.save(); 
-                ctx.translate(cx, cy); 
-                ctx.rotate(angle); 
-                ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(-30, -60); ctx.lineTo(-10, 0); ctx.lineTo(-30, 60); ctx.closePath(); ctx.fill(); 
-                ctx.restore(); 
-            } 
+    // 1. Background
+    if (assets.bg) {
+        ctx.fillStyle = assets.bg;
+        ctx.fillRect(state.camera.x, state.camera.y, width, height);
+    } else {
+        ctx.fillStyle = '#1e293b'; // Fallback
+        ctx.fillRect(state.camera.x, state.camera.y, width, height);
+    }
+    
+    // Grid (Restored)
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; ctx.globalAlpha = 0.3; 
+    const gridSize = 100; 
+    const startX = Math.floor(state.camera.x / gridSize) * gridSize; 
+    const startY = Math.floor(state.camera.y / gridSize) * gridSize; 
+    ctx.beginPath(); 
+    for(let x = startX; x < state.camera.x + width + gridSize; x += gridSize) { ctx.moveTo(x, state.camera.y); ctx.lineTo(x, state.camera.y + height); } 
+    for(let y = startY; y < state.camera.y + height + gridSize; y += gridSize) { ctx.moveTo(state.camera.x, y); ctx.lineTo(state.camera.x + width, y); } 
+    ctx.stroke(); 
+    ctx.globalAlpha = 1.0;
+
+    // Hazard Stripes (Restored)
+    ctx.fillStyle = '#ef4444'; ctx.globalAlpha = 0.6; 
+    for (let gx = 0; gx < 5; gx++) { 
+        for (let gy = 0; gy < 5; gy++) { 
+            if (gx === 2 && gy === 2) continue; 
+            const cx = gx * GRID_CELL_SIZE + GRID_CELL_SIZE / 2; 
+            const cy = gy * GRID_CELL_SIZE + GRID_CELL_SIZE / 2; 
+            // Culling optimization for stripes
+            if (!isVisible({x: cx, y: cy}, state.camera, width, height, GRID_CELL_SIZE)) continue;
+            
+            ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI/4); 
+            ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(-30, -60); ctx.lineTo(-10, 0); ctx.lineTo(-30, 60); ctx.closePath(); ctx.fill(); 
+            ctx.restore(); 
         } 
-        ctx.globalAlpha = 1.0;
+    } 
+    ctx.globalAlpha = 1.0;
 
-        // Draw Navigation Arrows in Outer Grids
-        for(let gx=0; gx<5; gx++) {
-            for(let gy=0; gy<5; gy++) {
-                if (gx === 2 && gy === 2) continue;
-                // Center of grid cell
-                const cx = gx * GRID_CELL_SIZE + GRID_CELL_SIZE/2;
-                const cy = gy * GRID_CELL_SIZE + GRID_CELL_SIZE/2;
-                
-                // Only draw if within view
-                if (cx > camera.x - 200 && cx < camera.x + width + 200 && cy > camera.y - 200 && cy < camera.y + height + 200) {
-                     const centerX = POI_LOCATIONS.TREE.x;
-                     const centerY = POI_LOCATIONS.TREE.y;
-                     const angle = Math.atan2(centerY - cy, centerX - cx);
-                     
-                     ctx.save();
-                     ctx.translate(cx, cy);
-                     ctx.rotate(angle);
-                     
-                     // Red Arrow on Floor
-                     ctx.fillStyle = '#b91c1c'; // Red-700
-                     ctx.globalAlpha = 0.3;
-                     ctx.beginPath();
-                     ctx.moveTo(100, 0);
-                     ctx.lineTo(-50, -80);
-                     ctx.lineTo(-50, 80);
-                     ctx.fill();
-                     
-                     ctx.restore();
-                }
-            }
-        }
-        ctx.globalAlpha = 1.0;
-
-        // Snow (Always active)
-        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; 
-        ctx.beginPath(); 
-        state.snow.forEach((flake, i) => { 
-            // Position updated in GameLoop now for DT independence
-            let drawX = (flake.x - camera.x) % width; if (drawX < 0) drawX += width; drawX += width; drawX = drawX % width; drawX += camera.x; 
-            let drawY = (flake.y - camera.y) % height; if (drawY < 0) drawY += height; drawY += height; drawY = drawY % height; drawY += camera.y; 
-            const r = 2 + (i % 2); 
-            ctx.moveTo(drawX + r, drawY); ctx.arc(drawX, drawY, r, 0, Math.PI * 2); 
-        }); 
-        ctx.fill(); 
-        ctx.globalAlpha = 1.0;
-    }
-
-    if (state.inBunker) {
-        // ... Bunker Draw Code ...
-        ctx.fillStyle = '#0f172a'; ctx.fillRect(camera.x, camera.y, width, height);
-        if (assets.wood) ctx.fillStyle = assets.wood; else ctx.fillStyle = '#a05a2c';
-        ctx.fillRect(0, 0, BUNKER_INT_SIZE.w, BUNKER_INT_SIZE.h);
-        ctx.strokeStyle = '#27272a'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, BUNKER_INT_SIZE.w, BUNKER_INT_SIZE.h);
-
-        // 1. Exit (Top Left)
-        const exit = BUNKER_ZONES.EXIT; 
-        ctx.fillStyle = '#10b981'; ctx.fillRect(exit.x - 30, exit.y - 40, 60, 10); 
-        ctx.fillStyle = '#000000'; ctx.fillRect(exit.x - 20, exit.y - 40, 40, 60); 
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; 
-        ctx.beginPath(); ctx.moveTo(exit.x, exit.y + 10); ctx.lineTo(exit.x, exit.y - 20); ctx.moveTo(exit.x - 10, exit.y - 10); ctx.lineTo(exit.x, exit.y - 20); ctx.lineTo(exit.x + 10, exit.y - 10); ctx.stroke();
-        
-        // 2. Crafting (Top Right)
-        const craft = BUNKER_ZONES.CRAFTING; 
-        ctx.fillStyle = '#713f12'; ctx.fillRect(craft.x - 20, craft.y - 30, 40, 60); 
-        ctx.fillStyle = '#a16207'; ctx.fillRect(craft.x - 25, craft.y - 35, 10, 70); 
-        
-        // 3. Sell (Middle Left)
-        const sell = BUNKER_ZONES.SELL; 
-        ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(sell.x, sell.y, 25, 0, Math.PI * 2); ctx.fill(); 
-        ctx.fillStyle = '#000'; ctx.font = 'bold 24px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('$', sell.x, sell.y);
-
-        // 4. Gunsmith (Middle Right)
-        const smith = BUNKER_ZONES.GUNSMITH; 
-        ctx.fillStyle = '#334155'; ctx.fillRect(smith.x - 15, smith.y, 30, 20); 
-        ctx.fillStyle = '#475569'; ctx.beginPath(); ctx.moveTo(smith.x - 20, smith.y); ctx.lineTo(smith.x + 10, smith.y); ctx.lineTo(smith.x + 20, smith.y - 5); ctx.lineTo(smith.x + 20, smith.y - 15); ctx.lineTo(smith.x - 20, smith.y - 15); ctx.fill();
-
-        ctx.fillStyle = '#ffffff'; ctx.font = '12px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; 
-        ctx.fillText("EXIT", exit.x, exit.y + 40); 
-        ctx.fillText("CRAFTING", craft.x, craft.y + 40); 
-        ctx.fillText("SELL", sell.x, sell.y + 40); 
-        ctx.fillText("GUNSMITH", smith.x, smith.y + 40); 
-
-        // BUNKER ENTITIES DRAW (Loot, Medkits)
-        state.worldMedkits.forEach(m => drawWorldMedkit(ctx, m));
-        state.loot.forEach(l => drawLootItem(ctx, l, state, balance));
-
-    } else if (state.gamePhase !== 'menu') {
-        // --- WORLD ENTITIES DRAW (Skip in Menu) ---
-        // POIs
-        for (const poi of state.worldPois) { 
-            if (poi.x > camera.x - 300 && poi.x < camera.x + width + 300 && poi.y > camera.y - 300 && poi.y < camera.y + height + 300) {
-                drawPOI(ctx, poi); 
-            }
-        }
-
-        // Puddles
-        state.puddles.forEach(pud => {
-            ctx.save(); ctx.translate(pud.pos.x, pud.pos.y);
-            ctx.fillStyle = 'rgba(34, 197, 94, 0.6)'; ctx.beginPath(); ctx.arc(0,0,pud.radius,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#4ade80'; ctx.beginPath(); ctx.arc(10, 10, 5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-20, -10, 8, 0, Math.PI*2); ctx.fill();
-            ctx.restore();
-        });
-        
-        // --- LAYER 1: FLOOR PARTICLES (Blood, Casings) ---
-        state.particles.forEach(pt => { 
-            if (pt.type !== 'casing' && pt.type !== 'blood') return;
-
-            ctx.fillStyle = pt.color; ctx.globalAlpha = Math.min(1.0, pt.life); 
-            if (pt.type === 'casing') { 
-                ctx.save(); 
-                ctx.translate(pt.pos.x, pt.pos.y); 
-                ctx.rotate(pt.rotation); 
-                ctx.fillRect(-1.5, -0.75, 3, 1.5); 
-                ctx.restore(); 
-            } else if (pt.type === 'blood') { 
-                 ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, pt.size, 0, Math.PI * 2); ctx.fill(); 
-            }
-        }); ctx.globalAlpha = 1.0;
-
-        // Mines
-        state.mines.forEach(m => {
-            if (m.dead) return;
-            ctx.save(); ctx.translate(m.pos.x, m.pos.y);
-            // Draw circle with blinking red light
-            ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle = m.armed && Math.floor(state.gameTime / 500) % 2 === 0 ? '#ef4444' : '#475569';
-            ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#94a3b8'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.stroke();
-            ctx.restore();
-        });
-
-        // Turrets
-        state.turrets.forEach(t => {
-            ctx.save(); ctx.translate(t.pos.x, t.pos.y);
-            ctx.fillStyle = '#1f2937'; ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#374151'; ctx.lineWidth=3; ctx.stroke();
-            ctx.rotate(t.rotation);
-            ctx.fillStyle = '#60a5fa'; ctx.fillRect(0, -4, 20, 8); // Barrel
-            ctx.restore();
-        });
-
-        // Decoys
-        state.decoys.forEach(d => {
-            ctx.save(); ctx.translate(d.pos.x, d.pos.y);
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(0, 10, 15, 0, Math.PI*2); ctx.fill(); // Base
-            ctx.beginPath(); ctx.arc(0, -5, 12, 0, Math.PI*2); ctx.fill(); // Mid
-            ctx.beginPath(); ctx.arc(0, -20, 10, 0, Math.PI*2); ctx.fill(); // Head
-            ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(10, -18); ctx.lineTo(0, -16); ctx.fill(); // Nose
-            ctx.fillStyle = 'red'; ctx.fillRect(-15, -40, 30, 4);
-            ctx.fillStyle = 'green'; ctx.fillRect(-15, -40, 30 * (d.hp / d.maxHp), 4);
-            ctx.restore();
-        });
-
-        // Reinforcements
-        state.reinforcements.forEach(r => {
-            ctx.save();
-            if (state.gameTime < r.immuneUntil) ctx.globalAlpha = 0.5 + Math.sin(state.gameTime/100)*0.3;
-            ctx.translate(r.pos.x, r.pos.y); ctx.rotate(r.rotation);
-            // Draw like player but blue uniform
-            ctx.fillStyle = '#1e3a8a'; ctx.beginPath(); ctx.roundRect(-15, -16, 28, 32, 10); ctx.fill(); // Body
-            ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill(); // Helmet
-            ctx.fillStyle = '#93c5fd'; ctx.beginPath(); ctx.arc(18, 13, 5, 0, Math.PI*2); ctx.fill(); // Hand
-            ctx.restore(); ctx.globalAlpha = 1.0;
-            // HP Bar
-            if (r.hp < r.maxHp) {
-                ctx.fillStyle = 'red'; ctx.fillRect(r.pos.x - 15, r.pos.y - 30, 30, 4);
-                ctx.fillStyle = 'green'; ctx.fillRect(r.pos.x - 15, r.pos.y - 30, 30 * (r.hp / r.maxHp), 4);
-            }
-        });
-
-        // Clones
-        state.clones.forEach(c => {
-            ctx.save(); ctx.globalAlpha = 0.6; // Ghostly
-            ctx.translate(c.pos.x, c.pos.y); ctx.rotate(c.rotation);
-            // Simplified player draw
-            ctx.fillStyle = '#335c67'; ctx.beginPath(); ctx.roundRect(-15, -16, 28, 32, 10); ctx.fill(); // Body
-            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill(); // Hat
-            ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(18, 13, 5, 0, Math.PI*2); ctx.fill(); // Hand
-            ctx.restore(); ctx.globalAlpha = 1.0;
-        });
-
-        // Medkits
-        state.worldMedkits.forEach(m => drawWorldMedkit(ctx, m));
-
-        // World Keys
-        state.worldKeys.forEach(k => {
-            ctx.save();
-            ctx.translate(k.pos.x, k.pos.y + Math.sin(state.gameTime / 200) * 5);
-            ctx.font = '32px serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🗝️', 0, 0);
-            ctx.restore();
-        });
-        
-        // Magic Drops
-        state.magicDrops.forEach(m => {
-            ctx.save(); ctx.translate(m.pos.x, m.pos.y + Math.sin(state.gameTime / 200) * 5); // Bobbing
-            ctx.font = '32px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            if (m.tier === 'Rare') { ctx.shadowBlur = 15; ctx.shadowColor = '#c084fc' }
-            ctx.fillText('✨', 0, 0);
-            ctx.restore();
-        });
-
-        // Bunkers (Active)
-        state.activeBunkers.forEach((bunker, i) => { 
-            if (bunker.x > camera.x - 200 && bunker.x < camera.x + width + 200 && bunker.y > camera.y - 200 && bunker.y < camera.y + height + 200) { 
-                const bx = bunker.x; 
-                const by = bunker.y; 
-                ctx.fillStyle = '#78350f'; ctx.fillRect(bx - 60, by - 40, 120, 80); 
-                ctx.strokeStyle = '#451a03'; ctx.lineWidth = 2; 
-                for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(bx - 60, by - 40 + i*20); ctx.lineTo(bx + 60, by - 40 + i*20); ctx.stroke(); } 
-                ctx.fillStyle = '#451a03'; ctx.fillRect(bx - 15, by + 10, 30, 30); 
-                ctx.fillStyle = '#fcd34d'; ctx.beginPath(); ctx.arc(bx + 10, by + 25, 3, 0, Math.PI*2); ctx.fill(); 
-                ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.moveTo(bx - 70, by - 40); ctx.lineTo(bx + 70, by - 40); ctx.lineTo(bx, by - 100); ctx.fill(); 
-                ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(bx, by - 100); ctx.lineTo(bx - 30, by - 75); ctx.lineTo(bx - 20, by - 70); ctx.lineTo(bx, by - 85); ctx.lineTo(bx + 20, by - 70); ctx.lineTo(bx + 30, by - 75); ctx.fill(); 
-                ctx.fillStyle = '#facc15'; ctx.font = '20px monospace'; ctx.textAlign = 'center'; ctx.fillText("SAFE HOUSE", bx, by - 110);
-                
-                const isUnlocked = state.unlockedBunkers.get(i) === state.wave; 
-                const hasKey = p.keys > 0; 
-                // Overhead prompt handles visual, this is floor text
-                
-                ctx.font = 'bold 12px monospace'; 
-                if (isUnlocked) { ctx.fillStyle = '#22c55e'; ctx.fillText("OPEN", bx, by + 58); } 
-                else if (hasKey) { ctx.fillStyle = '#facc15'; ctx.fillText("LOCKED", bx, by + 58); } 
-                else { ctx.fillStyle = '#ef4444'; ctx.fillText("LOCKED (NEED KEY)", bx, by + 58); } 
-            } 
-        });
-
-        // Sleigh
-        const { bronze, silver, gold } = balance.economy.sleighThresholds; 
-        const currentTotal = state.depositedCoins;
-        
-        let sx = POI_LOCATIONS.SLEIGH.x; 
-        let sy = POI_LOCATIONS.SLEIGH.y;
-
-        if (state.exitAnim.active) {
-            sx += state.exitAnim.offset.x;
-            sy += state.exitAnim.offset.y;
-        }
-
-        ctx.save();
-        ctx.translate(sx, sy);
-
-        const isGlowing = state.bossState.readyToExtract || (currentTotal >= bronze && !state.bossState.active && !state.bossState.summonRequested);
-        const isExtracting = state.extractionProgress > 0 || state.exitAnim.active;
-
-        // Vibration
-        if (isGlowing && !isExtracting) {
-            const cycle = 2300;
-            const dur = 150;
-            const t = state.gameTime % cycle;
-            if (t < dur) {
-                const mag = 10 * (Math.PI / 180); // Reduced to 10 degrees
-                const p = t / dur; // 0 to 1
-                const rot = Math.sin(p * Math.PI * 4) * mag; 
-                ctx.rotate(rot);
-            }
-        }
-        
-        // Base Outline
-        ctx.strokeStyle = '#9ca3af'; 
-        ctx.lineWidth = 4; 
-        ctx.beginPath(); 
-        ctx.moveTo(-70, -30); ctx.lineTo(70, -30); 
-        ctx.moveTo(-70, 30); ctx.lineTo(70, 30); 
-        ctx.stroke(); 
-        ctx.beginPath(); 
-        ctx.moveTo(-40, -30); ctx.lineTo(-40, 30); 
-        ctx.moveTo(40, -30); ctx.lineTo(40, 30); 
-        ctx.stroke(); 
-
-        // Glow Overlay
-        if (isGlowing) {
-             const glowPhase = (Math.sin(state.gameTime / 200) + 1) / 2; // 0..1
-             ctx.save();
-             ctx.globalAlpha = glowPhase;
-             ctx.shadowBlur = glowPhase * 40;
-             ctx.shadowColor = '#facc15';
-             ctx.strokeStyle = '#facc15';
-             
-             ctx.beginPath(); 
-             ctx.moveTo(-70, -30); ctx.lineTo(70, -30); 
-             ctx.moveTo(-70, 30); ctx.lineTo(70, 30); 
-             ctx.stroke(); 
-             ctx.beginPath(); 
-             ctx.moveTo(-40, -30); ctx.lineTo(-40, 30); 
-             ctx.moveTo(40, -30); ctx.lineTo(40, 30); 
-             ctx.stroke();
-             ctx.restore();
-        }
-        
-        ctx.shadowBlur = 0; 
-
-        // Body
-        ctx.fillStyle = '#b91c1c'; ctx.fillRect(-60, -25, 100, 50); 
-        ctx.fillStyle = '#7f1d1d'; ctx.fillRect(-30, -20, 40, 40); 
-        ctx.fillStyle = '#fcd34d'; ctx.beginPath(); ctx.arc(-40, 0, 25, 0, Math.PI * 2); ctx.fill(); 
-        ctx.fillStyle = '#b45309'; ctx.beginPath(); ctx.arc(-40, 0, 10, 0, Math.PI * 2); ctx.fill(); 
-        ctx.fillStyle = '#fbbf24'; ctx.font = '20px monospace'; ctx.textAlign = 'center'; ctx.fillText("SLEIGH (EXIT)", 0, -50);
-        
-        let target = bronze; if (currentTotal >= bronze) target = silver; if (currentTotal >= silver) target = gold; 
-        if (!state.exitAnim.active) {
-             ctx.fillStyle = '#facc15'; ctx.font = 'bold 16px monospace'; ctx.fillText(`${Math.floor(currentTotal)} / ${target}`, 0, 50);
-        }
-
-        // Extraction Radial
-        if (state.extractionProgress > 0 && !state.exitAnim.active) {
-            const maxTime = balance.player.pickupTime * 3;
-            const progress = state.extractionProgress / maxTime;
-            ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(0, 0, balance.player.pickupRadius * 1.5, 0, Math.PI * 2 * progress); 
-            ctx.stroke();
-            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px monospace'; ctx.fillText("EXTRACTING...", 0, 70);
-        }
-
-        // Summoning Radial
-        if (state.summoningProgress > 0) {
-            const maxTime = balance.player.pickupTime * 3;
-            const progress = state.summoningProgress / maxTime;
-            ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(0, 0, balance.player.pickupRadius, 0, Math.PI * 2 * progress);
-            ctx.stroke();
-            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px monospace'; ctx.fillText("SUMMONING BOSS...", 0, 70);
-        }
-
-        ctx.restore();
-
-        // Transfer Beams
-        if (state.transferState.active) { 
-            ctx.save(); 
-            const dx = sx - p.pos.x; 
-            const dy = sy - p.pos.y; 
-            const d = Math.sqrt(dx*dx + dy*dy); 
-            const angle = Math.atan2(dy, dx); 
-            ctx.translate(p.pos.x, p.pos.y); 
-            ctx.rotate(angle); 
-            ctx.beginPath(); 
-            ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)'; 
-            ctx.lineWidth = 3; 
-            const time = Date.now() / 100; 
-            for(let i=0; i<d; i+=10) { ctx.lineTo(i, Math.sin(i * 0.05 - time) * 10); } 
-            ctx.stroke(); 
-            ctx.beginPath(); 
-            ctx.strokeStyle = 'rgba(252, 211, 77, 0.6)'; 
-            ctx.lineWidth = 2; 
-            for(let i=0; i<d; i+=10) { ctx.lineTo(i, Math.sin(i * 0.05 - time + Math.PI) * 10); } 
-            ctx.stroke(); 
-            ctx.restore(); 
-        }
-
-        // Center Tree (Decoration)
-        ctx.fillStyle = '#166534'; 
-        ctx.beginPath(); ctx.moveTo(POI_LOCATIONS.TREE.x, POI_LOCATIONS.TREE.y - 200); 
-        ctx.lineTo(POI_LOCATIONS.TREE.x + 100, POI_LOCATIONS.TREE.y + 100); 
-        ctx.lineTo(POI_LOCATIONS.TREE.x - 100, POI_LOCATIONS.TREE.y + 100); 
-        ctx.fill(); 
-        ctx.fillStyle = '#ef4444'; 
-        [{x:0,y:-100},{x:-40,y:0},{x:30,y:20},{x:-20,y:60},{x:50,y:80}].forEach(o=>{
-            ctx.beginPath();ctx.arc(POI_LOCATIONS.TREE.x+o.x,POI_LOCATIONS.TREE.y+o.y,8,0,Math.PI*2);ctx.fill();
-        });
-
-        // --- LAYER 2: LOOT ---
-        state.loot.forEach(l => drawLootItem(ctx, l, state, balance));
-
-        // --- LAYER 3: ENTITIES ---
-        state.enemies.forEach(e => {
-            const stats = balance.enemies.types[e.type]; 
-            ctx.fillStyle = stats.color; 
-            ctx.save(); ctx.translate(e.pos.x, e.pos.y);
-            
-            if (e.type === EnemyType.Boss) { 
-                ctx.beginPath(); ctx.arc(0, 0, e.radius, 0, Math.PI * 2); ctx.fill(); 
-                ctx.fillStyle = '#fca5a5'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill(); 
-                ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(-15, -10, 5, 0, Math.PI * 2); ctx.arc(15, -10, 5, 0, Math.PI * 2); ctx.fill(); 
-                const moveAngle = Math.atan2(p.pos.y - e.pos.y, p.pos.x - e.pos.x); 
-                ctx.rotate(moveAngle - Math.PI/2); 
-                ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(-30, -20); ctx.lineTo(30, -20); ctx.lineTo(0, -80); ctx.fill(); 
-                ctx.fillStyle = '#ffffff'; ctx.fillRect(-35, -20, 70, 15); 
-                ctx.beginPath(); ctx.arc(0, -80, 10, 0, Math.PI*2); ctx.fill(); 
-                ctx.restore(); 
-                
-                ctx.fillStyle = 'red'; ctx.fillRect(e.pos.x - 60, e.pos.y - 120, 120, 10); 
-                ctx.fillStyle = '#22c55e'; ctx.fillRect(e.pos.x - 60, e.pos.y - 120, 120 * (e.hp / e.maxHp), 10); 
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(e.pos.x - 60, e.pos.y - 120, 120, 10); 
-            } else { 
-                ctx.beginPath(); ctx.arc(0, 0, e.radius, 0, Math.PI * 2); ctx.fill(); 
-                ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(-5, -5, 3, 0, Math.PI * 2); ctx.arc(5, -5, 3, 0, Math.PI * 2); ctx.fill(); 
-                if (e.type === EnemyType.Blue) { 
-                    ctx.fillStyle = '#334155'; ctx.fillRect(0, -2, e.radius + 10, 4); 
-                } 
-                ctx.restore(); 
-                
-                if (e.hp < e.maxHp) { 
-                    ctx.fillStyle = 'red'; ctx.fillRect(e.pos.x - 20, e.pos.y - 35, 40, 4); 
-                    ctx.fillStyle = 'green'; ctx.fillRect(e.pos.x - 20, e.pos.y - 35, 40 * (e.hp / e.maxHp), 4); 
-                } 
-            }
-        });
-
-        state.projectiles.forEach(pr => { 
-            const speed = Math.hypot(pr.velocity.x, pr.velocity.y); 
-            
-            // Special Draw for Boomerang
-            if (pr.boomerang) {
-                 ctx.save();
-                 ctx.translate(pr.pos.x, pr.pos.y);
-                 ctx.rotate(pr.rotation);
-                 ctx.fillStyle = '#a05a2c'; 
-                 ctx.beginPath(); ctx.moveTo(-5, -15); ctx.quadraticCurveTo(0, 0, 15, -5); ctx.lineTo(5, 5); ctx.quadraticCurveTo(0, 5, -5, 15); ctx.lineTo(-10, 5); ctx.fill();
+    // Navigation Arrows (Restored)
+    for(let gx=0; gx<5; gx++) {
+        for(let gy=0; gy<5; gy++) {
+            if (gx === 2 && gy === 2) continue;
+            const cx = gx * GRID_CELL_SIZE + GRID_CELL_SIZE/2;
+            const cy = gy * GRID_CELL_SIZE + GRID_CELL_SIZE/2;
+            if (isVisible({x:cx, y:cy}, state.camera, width, height, 200)) {
+                 const angle = Math.atan2(POI_LOCATIONS.TREE.y - cy, POI_LOCATIONS.TREE.x - cx);
+                 ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+                 ctx.fillStyle = '#b91c1c'; ctx.globalAlpha = 0.3;
+                 ctx.beginPath(); ctx.moveTo(100, 0); ctx.lineTo(-50, -80); ctx.lineTo(-50, 80); ctx.fill();
                  ctx.restore();
-                 return;
-            }
-
-            // Special Draw for Grenade
-            if (pr.isGrenade) {
-                ctx.save();
-                ctx.translate(pr.pos.x, pr.pos.y);
-                ctx.rotate(pr.rotation);
-                ctx.fillStyle = '#166534';
-                ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#4ade80';
-                ctx.beginPath(); ctx.arc(2,-2,2,0,Math.PI*2); ctx.fill();
-                ctx.restore();
-                return;
-            }
-
-            // Standard Draw
-            if (speed > 5 || (pr.weaponType && pr.weaponType !== WeaponType.Flamethrower)) { 
-                ctx.beginPath(); ctx.lineWidth = pr.radius * 2; ctx.lineCap = 'round'; ctx.strokeStyle = pr.color; 
-                ctx.moveTo(pr.pos.x - pr.velocity.x, pr.pos.y - pr.velocity.y); 
-                ctx.lineTo(pr.pos.x, pr.pos.y); ctx.stroke(); 
-                ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(pr.pos.x, pr.pos.y, pr.radius * 0.7, 0, Math.PI * 2); ctx.fill(); 
-            } else { 
-                ctx.beginPath(); ctx.fillStyle = pr.color; ctx.arc(pr.pos.x, pr.pos.y, pr.radius, 0, Math.PI * 2); ctx.fill(); 
-                ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(pr.pos.x, pr.pos.y, pr.radius * 0.5, 0, Math.PI * 2); ctx.fill(); 
-            } 
-        });
-
-    }
-    
-    // --- LAYER 4: AIR PARTICLES & TEXT (Moved out to support Bunker rendering) ---
-    if (state.gamePhase !== 'menu') {
-        state.floatingTexts.forEach(ft => { 
-            ctx.save(); ctx.translate(ft.pos.x, ft.pos.y); 
-            ctx.fillStyle = ft.color; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; 
-            ctx.globalAlpha = ft.life; 
-            ctx.fillText(ft.text, 0, 0); 
-            ctx.restore(); 
-        }); 
-        ctx.globalAlpha = 1.0;
-        
-        state.particles.forEach(pt => { 
-            if (pt.type === 'casing' || pt.type === 'blood') return; 
-
-            ctx.fillStyle = pt.color; ctx.globalAlpha = Math.min(1.0, pt.life); 
-            if (pt.type === 'heart') { 
-                ctx.font = '20px serif'; ctx.textAlign = 'center'; ctx.fillText('❤️', pt.pos.x, pt.pos.y); 
-            } else if (pt.type === 'explosion') {
-                ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, 40 * pt.life, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#fcd34d'; ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, 20 * pt.life, 0, Math.PI*2); ctx.fill();
-            } else { 
-                ctx.beginPath(); ctx.arc(pt.pos.x, pt.pos.y, pt.size, 0, Math.PI * 2); ctx.fill(); 
-            } 
-        }); 
-        ctx.globalAlpha = 1.0;
-    }
-
-    if (state.gamePhase !== 'intro' && state.gamePhase !== 'menu') {
-        drawPlayer(ctx, state, balance);
-        
-        // Draw Mobile Joysticks
-        if (state.isMobile) {
-            ctx.restore(); // Pop back to Screen Space (Identity)
-            ctx.save();
-            
-            // Left Joystick (Movement) - Now the only one
-            if (state.inputs.mobile.joysticks.left.active) {
-                const j = state.inputs.mobile.joysticks.left;
-                ctx.beginPath();
-                ctx.arc(j.origin.x, j.origin.y, 40, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-                ctx.fill();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                ctx.beginPath();
-                ctx.arc(j.current.x, j.current.y, 20, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-                ctx.fill();
             }
         }
     }
+    ctx.globalAlpha = 1.0;
     
+    // 2. POIs
+    state.worldPois.forEach(poi => {
+        if (isVisible({x: poi.x, y: poi.y}, state.camera, width, height, 400)) {
+            drawPOI(ctx, poi);
+        }
+    });
+
+    // 3. Bunkers (Exterior - Restored Details)
+    state.activeBunkers.forEach((b, i) => {
+        if (isVisible(b, state.camera, width, height)) {
+            const unlocked = state.unlockedBunkers.has(i);
+            const bx = b.x; const by = b.y;
+            ctx.save();
+            ctx.translate(bx, by);
+            // Bunker Graphic
+            ctx.fillStyle = '#78350f'; ctx.fillRect(-60, -40, 120, 80); 
+            ctx.fillStyle = '#0f172a'; ctx.fillRect(-20, 0, 40, 40); // Door
+            
+            // Roof
+            ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.moveTo(-70, -40); ctx.lineTo(70, -40); ctx.lineTo(0, -100); ctx.fill(); 
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, -100); ctx.lineTo(-30, -75); ctx.lineTo(-20, -70); ctx.lineTo(0, -85); ctx.lineTo(20, -70); ctx.lineTo(30, -75); ctx.fill(); 
+            
+            // Text
+            ctx.fillStyle = '#facc15'; ctx.font = '20px monospace'; ctx.textAlign = 'center'; ctx.fillText("SAFE HOUSE", 0, -110);
+            
+            const hasKey = state.player.keys > 0;
+            ctx.font = 'bold 12px monospace'; 
+            if (unlocked) { ctx.fillStyle = '#22c55e'; ctx.fillText("OPEN", 0, 58); } 
+            else if (hasKey) { ctx.fillStyle = '#facc15'; ctx.fillText("LOCKED", 0, 58); } 
+            else { ctx.fillStyle = '#ef4444'; ctx.fillText("LOCKED (NEED KEY)", 0, 58); } 
+            
+            // Light
+            ctx.fillStyle = unlocked ? '#22c55e' : '#ef4444';
+            ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
+            ctx.beginPath(); ctx.arc(0, -20, 5, 0, Math.PI*2); ctx.fill();
+            
+            ctx.restore();
+        }
+    });
+    
+    // 4. Sleigh (Exit)
+    if (isVisible(POI_LOCATIONS.SLEIGH, state.camera, width, height)) {
+         ctx.save();
+         ctx.translate(POI_LOCATIONS.SLEIGH.x, POI_LOCATIONS.SLEIGH.y);
+         // Magic Circle
+         if (state.bossState.readyToExtract) {
+             const t = Date.now() / 200;
+             ctx.strokeStyle = `hsl(${t % 360}, 100%, 50%)`;
+             ctx.lineWidth = 5;
+             ctx.beginPath(); ctx.arc(0,0, balance.player.pickupRadius, 0, Math.PI*2); ctx.stroke();
+         }
+         
+         // Sleigh Art
+         ctx.fillStyle = '#b91c1c';
+         ctx.beginPath();
+         ctx.moveTo(-40, 0); ctx.quadraticCurveTo(-40, 40, 0, 40); ctx.quadraticCurveTo(40, 40, 40, 0);
+         ctx.lineTo(50, -20); ctx.lineTo(-50, -20); ctx.fill();
+         // Runners
+         ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 4;
+         ctx.beginPath(); ctx.moveTo(-50, 45); ctx.lineTo(50, 45); ctx.quadraticCurveTo(70, 45, 70, 25); ctx.stroke();
+         ctx.beginPath(); ctx.moveTo(-30, 45); ctx.lineTo(-30, 20); ctx.stroke();
+         ctx.beginPath(); ctx.moveTo(30, 45); ctx.lineTo(30, 20); ctx.stroke();
+         
+         // Bag
+         ctx.fillStyle = '#166534';
+         ctx.beginPath(); ctx.arc(0, -20, 30, Math.PI, 0); ctx.fill();
+
+         ctx.restore();
+    }
+
+    // 5. Ground Decals (Puddles, Mines)
+    state.puddles.forEach(p => {
+         if (isVisible(p.pos, state.camera, width, height)) {
+             if (p.style === 'candy') {
+                 ctx.fillStyle = 'rgba(239, 68, 68, 0.4)'; // Red for Candy
+                 ctx.beginPath(); ctx.arc(p.pos.x, p.pos.y, p.radius, 0, Math.PI*2); ctx.fill();
+                 ctx.strokeStyle = '#fca5a5'; ctx.lineWidth = 2; ctx.stroke();
+                 // Spiral
+                 const t = state.gameTime / 1000;
+                 ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                 ctx.beginPath();
+                 for(let i=0; i<30; i++) {
+                     const a = i * 0.5 + t;
+                     const r = (i/30) * p.radius;
+                     ctx.lineTo(p.pos.x + Math.cos(a)*r, p.pos.y + Math.sin(a)*r);
+                 }
+                 ctx.stroke();
+             } else {
+                 ctx.fillStyle = 'rgba(132, 204, 22, 0.4)';
+                 ctx.beginPath(); ctx.arc(p.pos.x, p.pos.y, p.radius, 0, Math.PI*2); ctx.fill();
+             }
+         }
+    });
+    
+    state.mines.forEach(m => {
+        if (isVisible(m.pos, state.camera, width, height)) {
+            ctx.fillStyle = m.armed ? '#ef4444' : '#fbbf24';
+            ctx.beginPath(); ctx.arc(m.pos.x, m.pos.y, m.radius, 0, Math.PI*2); ctx.fill();
+            if (m.armed) {
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+                ctx.beginPath(); ctx.arc(m.pos.x, m.pos.y, m.triggerRadius, 0, Math.PI*2); ctx.stroke();
+            }
+        }
+    });
+
+    // 6. Turrets & Decoys
+    state.turrets.forEach(t => {
+        if (isVisible(t.pos, state.camera, width, height)) {
+            ctx.save(); ctx.translate(t.pos.x, t.pos.y);
+            ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.moveTo(-10,10); ctx.lineTo(0,-10); ctx.lineTo(10,10); ctx.fill();
+            ctx.rotate(t.rotation);
+            ctx.fillStyle = '#3b82f6'; ctx.fillRect(-5, -5, 25, 10);
+            ctx.restore();
+        }
+    });
+    
+    state.decoys.forEach(d => {
+        if (isVisible(d.pos, state.camera, width, height)) {
+            ctx.save(); ctx.translate(d.pos.x, d.pos.y);
+            // Snowman
+            ctx.fillStyle = '#fff'; 
+            ctx.beginPath(); ctx.arc(0, 10, 15, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0, -5, 12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0, -20, 8, 0, Math.PI*2); ctx.fill();
+            // HP Bar
+            ctx.fillStyle = 'red'; ctx.fillRect(-15, -35, 30, 4);
+            ctx.fillStyle = 'green'; ctx.fillRect(-15, -35, 30 * (d.hp/d.maxHp), 4);
+            ctx.restore();
+        }
+    });
+
+    // 7. Loot
+    state.loot.forEach(l => {
+        if (!isVisible(l.pos, state.camera, width, height)) return;
+        ctx.save(); ctx.translate(l.pos.x, l.pos.y);
+        
+        if (l.type === 'present') {
+             // Wiggle
+             const wiggle = Math.sin(state.gameTime / 200) * 0.1;
+             ctx.rotate(l.rotation + wiggle);
+             ctx.fillStyle = '#ef4444'; ctx.fillRect(-12, -12, 24, 24);
+             ctx.fillStyle = '#facc15'; ctx.fillRect(-4, -12, 8, 24); ctx.fillRect(-12, -4, 24, 8);
+        } else if (l.type === 'weapon_drop') {
+             // Halo
+             ctx.shadowBlur = 10; ctx.shadowColor = l.color || '#fff';
+             ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(0,0, 18, 0, Math.PI*2); ctx.fill();
+             if (l.weaponType) drawWeaponIcon(ctx, l.weaponType, 0, 0, 20);
+             ctx.shadowBlur = 0;
+             // Label
+             ctx.fillStyle = l.color || '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+             ctx.fillText(l.label || '', 0, -25);
+        } else {
+             // Gear
+             ctx.shadowBlur = 10; ctx.shadowColor = l.color || '#fff';
+             ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(0,0, 18, 0, Math.PI*2); ctx.fill();
+             ctx.fillStyle = l.color || '#fff'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+             ctx.fillText('⚙️', 0, 0);
+             ctx.shadowBlur = 0;
+             // Label
+             ctx.fillStyle = l.color || '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline='alphabetic';
+             ctx.fillText(l.label || '', 0, -25);
+        }
+        
+        ctx.restore();
+    });
+    
+    // 8. Reinforcements & Clones
+    state.reinforcements.forEach(r => {
+        if (!isVisible(r.pos, state.camera, width, height)) return;
+        ctx.save(); ctx.translate(r.pos.x, r.pos.y); ctx.rotate(r.rotation);
+        // Soldier Art
+        ctx.fillStyle = '#1e40af'; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fill(); // Blue Helmet
+        ctx.fillStyle = '#60a5fa'; ctx.fillRect(10, -3, 15, 6); // Gun
+        ctx.restore();
+    });
+    
+    state.clones.forEach(c => {
+         if (!isVisible(c.pos, state.camera, width, height)) return;
+         ctx.globalAlpha = 0.6;
+         drawPlayer(ctx, { ...state, player: { ...state.player, pos: c.pos, angle: c.rotation, weapon: WeaponType.Sword } as any }, balance); // Mock render
+         ctx.globalAlpha = 1.0;
+    });
+
+    // 9. Enemies
+    state.enemies.forEach(e => {
+        if (isVisible(e.pos, state.camera, width, height, 100)) {
+            drawEnemy(ctx, e, state.gameTime, balance);
+        }
+    });
+
+    // 10. Player
+    drawPlayer(ctx, state, balance);
+
+    // 11. Projectiles
+    state.projectiles.forEach(p => {
+        if (!isVisible(p.pos, state.camera, width, height, 50)) return;
+        ctx.save(); ctx.translate(p.pos.x, p.pos.y); ctx.rotate(p.rotation);
+        
+        if (p.isGrenade) {
+            ctx.fillStyle = p.isCandyGrenade ? '#ef4444' : '#000';
+            ctx.beginPath(); ctx.arc(0,0, p.isCandyGrenade ? 8 : 5, 0, Math.PI*2); ctx.fill();
+            if (p.isCandyGrenade) {
+                // Striping
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+            }
+        } else if (p.boomerang) {
+            ctx.fillStyle = p.color;
+            ctx.rotate(state.gameTime / 50);
+            ctx.beginPath(); ctx.moveTo(-5,0); ctx.quadraticCurveTo(5,-10, 15, -5); ctx.quadraticCurveTo(5, -5, -5, 0); ctx.fill();
+        } else if (p.isTanglerShot) {
+            // Tangler Projectile: String of lights
+            const t = state.gameTime / 50;
+            for(let i=0; i<3; i++) {
+                ctx.fillStyle = i===0?'#ef4444':i===1?'#22c55e':'#3b82f6';
+                const off = (i-1)*6;
+                ctx.beginPath(); ctx.arc(off + Math.sin(t+i)*2, Math.cos(t+i)*2, 3, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(10,0); ctx.stroke();
+        } else {
+            ctx.fillStyle = p.color;
+            if (p.weaponType === WeaponType.Snowball) {
+                ctx.beginPath(); ctx.arc(0,0, p.radius, 0, Math.PI*2); ctx.fill();
+            } else {
+                ctx.fillRect(-p.radius, -p.radius/2, p.radius*2, p.radius);
+            }
+        }
+        ctx.restore();
+    });
+
+    // 12. Particles
+    state.particles.forEach(p => {
+        if (!isVisible(p.pos, state.camera, width, height)) return;
+        ctx.globalAlpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color;
+        
+        if (p.type === 'snow') {
+             ctx.beginPath(); ctx.arc(p.pos.x, p.pos.y, p.size, 0, Math.PI*2); ctx.fill();
+        } else if (p.type === 'casing') {
+             ctx.save(); ctx.translate(p.pos.x, p.pos.y); ctx.rotate(p.rotation);
+             ctx.fillRect(-2, -1, 4, 2);
+             ctx.restore();
+        } else if (p.type === 'shockwave') {
+             // Expanding Ring
+             ctx.strokeStyle = p.color;
+             ctx.lineWidth = 4 * (1 - p.life/p.maxLife); // Thin out as it expands
+             ctx.beginPath(); 
+             ctx.arc(p.pos.x, p.pos.y, p.size, 0, Math.PI*2); 
+             ctx.stroke();
+        } else {
+             ctx.beginPath(); ctx.arc(p.pos.x, p.pos.y, p.radius * (p.life/p.maxLife), 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha = 1.0;
+    });
+
+    // 13. Floating Texts
+    state.floatingTexts.forEach(t => {
+        if (!isVisible(t.pos, state.camera, width, height)) return;
+        ctx.save();
+        ctx.translate(t.pos.x, t.pos.y);
+        ctx.fillStyle = t.color;
+        ctx.shadowBlur = 2; ctx.shadowColor = '#000';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(t.text, 0, 0);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    });
+
     ctx.restore();
+
+    // 14. Screen Overlay (Snow, UI effects)
+    // Snow
+    ctx.fillStyle = '#fff';
+    state.snow.forEach(s => {
+        ctx.globalAlpha = Math.random() * 0.5 + 0.3;
+        ctx.beginPath(); ctx.arc(s.x, s.y, Math.random() * 2 + 1, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+
+    // Damage Flash
+    if (state.screenShake > 0) {
+         state.screenShake *= 0.9;
+         if (state.screenShake < 0.5) state.screenShake = 0;
+    }
 };

@@ -1,8 +1,8 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { InventoryItem, ItemTier, HUDState } from '../types.ts';
 import { WeaponIcon } from './WeaponIcon.tsx';
+import { INITIAL_GAME_BALANCE } from '../constants.ts'; // Fallback import if data isn't fully hydrated yet
 
 interface HUDProps {
     data: HUDState; 
@@ -216,11 +216,9 @@ export const HUD: React.FC<HUDProps> = ({ data }) => {
     if (data.activeModal === 'gunsmith') {
         const tier = data.weaponTier;
         const nextTier = tier < ItemTier.Red ? tier + 1 : null;
-        let upgradeCost = 0;
-        if (tier === ItemTier.White) upgradeCost = 50;
-        else if (tier === ItemTier.Grey) upgradeCost = 100;
-        else if (tier === ItemTier.Green) upgradeCost = 500;
-        else if (tier === ItemTier.Blue) upgradeCost = 2500;
+        
+        // Use cost from balance config
+        const upgradeCost = INITIAL_GAME_BALANCE.economy.upgradeCosts[tier];
         
         const canAfford = data.coins >= upgradeCost;
         

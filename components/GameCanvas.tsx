@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { GameBalance, GameState, ItemTier, WeaponType, InventoryItem, HUDState } from '../types.ts';
 import { createInitialState, updateGame } from '../systems/GameLoop.ts';
@@ -116,11 +115,7 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ balan
           
           if (currentTier >= ItemTier.Red) return;
           
-          let cost = 0;
-          if (currentTier === ItemTier.White) cost = 50; // Snowball Upgrade
-          else if (currentTier === ItemTier.Grey) cost = 100;
-          else if (currentTier === ItemTier.Green) cost = 500;
-          else if (currentTier === ItemTier.Blue) cost = 2500;
+          const cost = balance.economy.upgradeCosts[currentTier];
           
           if (p.coins >= cost) {
               p.coins -= cost;
