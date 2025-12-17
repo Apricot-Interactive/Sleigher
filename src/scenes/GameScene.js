@@ -9,7 +9,7 @@ import WaveManager from '../systems/WaveManager.js';
 import MapManager from '../systems/MapManager.js';
 import ExtractionManager from '../systems/ExtractionManager.js';
 import Player from '../entities/Player.js';
-import { PLAYER_SIZE, WAVE_DURATION } from '../config/constants.js';
+import { PLAYER_SIZE, WAVE_DURATION, MAP_SIZE } from '../config/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -21,48 +21,61 @@ export default class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Initialize managers
-        this.inputManager = new InputManager(this);
-        this.mapManager = new MapManager(this);
-        this.waveManager = new WaveManager(this);
-        this.extractionManager = new ExtractionManager(this);
+        console.log('GameScene create() started');
 
-        // Create map
-        this.mapManager.createMap();
+        try {
+            // Set world bounds
+            this.physics.world.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
 
-        // Create player
-        const spawnPoint = this.mapManager.getRandomSpawnPoint();
-        this.player = new Player(this, spawnPoint.x, spawnPoint.y, this.loadout);
+            // Initialize managers
+            this.inputManager = new InputManager(this);
+            this.mapManager = new MapManager(this);
+            this.waveManager = new WaveManager(this);
+            this.extractionManager = new ExtractionManager(this);
 
-        // Camera setup
-        this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
-        this.cameras.main.setZoom(1.0);
+            // Create map
+            this.mapManager.createMap();
 
-        // Groups for entities
-        this.enemies = this.physics.add.group();
-        this.projectiles = this.physics.add.group();
-        this.loot = this.physics.add.group();
-        this.presents = this.physics.add.group();
+            // Create player
+            const spawnPoint = this.mapManager.getRandomSpawnPoint();
+            this.player = new Player(this, spawnPoint.x, spawnPoint.y, this.loadout);
 
-        // Particles
-        this.createSnowParticles();
+            // Camera setup
+            this.cameras.main.setBounds(0, 0, MAP_SIZE, MAP_SIZE);
+            this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
+            this.cameras.main.setZoom(1.0);
 
-        // Start UI overlay
-        this.scene.launch('UIScene');
-        this.uiScene = this.scene.get('UIScene');
+            // Groups for entities
+            this.enemies = this.physics.add.group();
+            this.projectiles = this.physics.add.group();
+            this.loot = this.physics.add.group();
+            this.presents = this.physics.add.group();
 
-        // Game state
-        this.gameTime = 0;
-        this.wave = 1;
-        this.waveTimer = WAVE_DURATION * 1.5; // First wave is longer
-        this.magic = 0;
-        this.enemiesKilled = 0;
+            // Particles
+            this.createSnowParticles();
 
-        // Start wave manager
-        this.waveManager.startWave(this.wave);
+            // Start UI overlay
+            this.scene.launch('UIScene');
+            this.uiScene = this.scene.get('UIScene');
 
-        // Collision detection
-        this.setupCollisions();
+            // Game state
+            this.gameTime = 0;
+            this.wave = 1;
+            this.waveTimer = WAVE_DURATION * 1.5; // First wave is longer
+            this.magic = 0;
+            this.enemiesKilled = 0;
+
+            // Start wave manager
+            this.waveManager.startWave(this.wave);
+
+            // Collision detection
+            this.setupCollisions();
+
+            console.log('GameScene create() completed successfully');
+        } catch (error) {
+            console.error('Error in GameScene create():', error);
+            throw error;
+        }
     }
 
     setupCollisions() {

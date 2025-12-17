@@ -193,6 +193,8 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     startGame() {
+        console.log('startGame() called, selectedHeroIndex:', this.selectedHeroIndex);
+
         let loadout = null;
 
         if (this.selectedHeroIndex === -1) {
@@ -202,6 +204,7 @@ export default class MenuScene extends Phaser.Scene {
                 weaponTier: -1, // White
                 gear: [this.fngLoadout, null, null, null]
             };
+            console.log('FNG loadout created:', loadout);
         } else {
             // Veteran
             const vet = this.veterans[this.selectedHeroIndex];
@@ -215,11 +218,19 @@ export default class MenuScene extends Phaser.Scene {
                 // Delete veteran from localStorage (Permadeath!)
                 this.veterans.splice(this.selectedHeroIndex, 1);
                 localStorage.setItem('sleigher-veterans', JSON.stringify(this.veterans));
+                console.log('Veteran loadout created:', loadout);
             }
         }
 
         if (loadout) {
-            this.scene.start('GameScene', { loadout });
+            console.log('Starting GameScene with loadout:', loadout);
+            try {
+                this.scene.start('GameScene', { loadout });
+            } catch (error) {
+                console.error('Error starting GameScene:', error);
+            }
+        } else {
+            console.error('No loadout created, cannot start game');
         }
     }
 
